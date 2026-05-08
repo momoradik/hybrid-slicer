@@ -1,4 +1,4 @@
-using System.Text;
+using HybridSlicer.Application.Common;
 using HybridSlicer.Application.Interfaces;
 using HybridSlicer.Application.Interfaces.Repositories;
 using HybridSlicer.Domain.Enums;
@@ -100,7 +100,7 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
             var enabledBlocks = await _customGCode.GetEnabledAsync(ct);
             await _multiExtruder.ProcessAsync(result.GCodeFilePath, machine, enabledBlocks, ct);
 
-            await InjectCustomGCodeAsync(result.GCodeFilePath, ct);
+            await ApplyWrapperBlocksAsync(result.GCodeFilePath, enabledBlocks, ct);
 
             // Final step: translate from bed-centre coordinates to real machine coordinates
             // using origin and bed position from the machine profile. No-op if origin = bed centre.
@@ -127,38 +127,25 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
         }
     }
 
-    private async Task InjectCustomGCodeAsync(string gcodePath, CancellationToken ct)
+    /// <summary>
+    /// Wraps the sliced G-code with the four bookend custom triggers
+    /// (JobStart, BeforePrinting, AfterPrinting, JobEnd) using HSCB markers so the
+    /// hybrid orchestrator can later strip and re-apply them on the merged file.
+    /// </summary>
+    private async Task ApplyWrapperBlocksAsync(
+        string gcodePath,
+        IReadOnlyList<Domain.Entities.CustomGCodeBlock> enabledBlocks,
+        CancellationToken ct)
     {
-        var startBlocks = (await _customGCode.GetByTriggerAsync(GCodeTrigger.JobStart, ct))
-            .Where(b => b.IsEnabled).OrderBy(b => b.SortOrder).ToList();
-        var endBlocks = (await _customGCode.GetByTriggerAsync(GCodeTrigger.JobEnd, ct))
-            .Where(b => b.IsEnabled).OrderBy(b => b.SortOrder).ToList();
-
-        if (startBlocks.Count == 0 && endBlocks.Count == 0) return;
+        var hasAny = enabledBlocks.Any(b => b.IsEnabled && b.Trigger
+            is GCodeTrigger.JobStart
+            or GCodeTrigger.BeforePrinting
+            or GCodeTrigger.AfterPrinting
+            or GCodeTrigger.JobEnd);
+        if (!hasAny) return;
 
         var original = await File.ReadAllTextAsync(gcodePath, ct);
-        var sb = new StringBuilder();
-
-        if (startBlocks.Count > 0)
-        {
-            sb.AppendLine("; === Custom G-code: Job Start ===");
-            foreach (var block in startBlocks)
-                sb.AppendLine(block.GCodeContent);
-            sb.AppendLine("; === End Custom G-code ===");
-            sb.AppendLine();
-        }
-
-        sb.Append(original);
-
-        if (endBlocks.Count > 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine("; === Custom G-code: Job End ===");
-            foreach (var block in endBlocks)
-                sb.AppendLine(block.GCodeContent);
-            sb.AppendLine("; === End Custom G-code ===");
-        }
-
-        await File.WriteAllTextAsync(gcodePath, sb.ToString(), ct);
+        var wrapped  = CustomGCodeBlockApplier.ApplyWrappers(original, enabledBlocks);
+        await File.WriteAllTextAsync(gcodePath, wrapped, ct);
     }
 }

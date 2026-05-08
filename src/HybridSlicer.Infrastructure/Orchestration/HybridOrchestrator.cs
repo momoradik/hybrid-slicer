@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using HybridSlicer.Application.Common;
 using HybridSlicer.Application.Interfaces;
 using HybridSlicer.Domain.Entities;
 using HybridSlicer.Domain.Enums;
@@ -9,11 +10,17 @@ namespace HybridSlicer.Infrastructure.Orchestration;
 
 /// <summary>
 /// Builds the single hybrid G-code output by:
-///  1. Parsing print G-code into per-layer segments (;LAYER:N markers)
-///  2. For each machining layer: printing through layer N first, then injecting
-///     BeforeMachining custom blocks → CNC toolpath → AfterMachining blocks
-///  3. Flushing any remaining print layers after the last machining event
-///  4. Wrapping with JobStart / JobEnd custom blocks
+///  1. Stripping any wrapper custom blocks previously baked into print.gcode
+///     (those are re-applied here so they appear once at the right place).
+///  2. Parsing print G-code into a header (lines before the first <c>;LAYER:N</c>
+///     marker) and per-layer segments.
+///  3. Emitting JobStart + BeforePrinting custom blocks at the top.
+///  4. Emitting Cura's startup G-code header.
+///  5. For each machining layer: printing through layer N first, then injecting
+///     BeforeMachining custom blocks → CNC toolpath → AfterMachining blocks.
+///  6. Flushing any remaining print layers (which carry Cura's footer) after the
+///     last machining event.
+///  7. Emitting AfterPrinting + JobEnd custom blocks at the bottom.
 /// </summary>
 public sealed partial class HybridOrchestrator : IHybridOrchestrator
 {
@@ -34,7 +41,10 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
             request.JobId, request.TotalPrintLayers, request.MachineEveryNLayers);
 
         var printGCode = await File.ReadAllTextAsync(request.PrintGCodePath, cancellationToken);
-        var segments = SplitByLayer(printGCode);
+        // Strip wrapper blocks previously baked into print.gcode by SlicePrintJobHandler —
+        // we re-emit them at the proper place in this hybrid output so each appears once.
+        printGCode = CustomGCodeBlockApplier.Strip(printGCode);
+        var (header, segments) = SplitByLayer(printGCode);
 
         var plan = HybridProcessPlan.Create(
             request.JobId,
@@ -52,10 +62,20 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
 
         int stepIndex = 0;
 
-        // JobStart blocks
+        // Bookend top: JobStart → BeforePrinting (HSCB-wrapped, deduped if upstream stripped them)
         AppendCustomBlocks(output, request.EnabledCustomBlocks, GCodeTrigger.JobStart, plan, ref stepIndex);
+        AppendCustomBlocks(output, request.EnabledCustomBlocks, GCodeTrigger.BeforePrinting, plan, ref stepIndex);
 
-        int printStart = 0; // last layer that has been flushed into output
+        // Cura's startup G-code (heating, homing, prime tower) lives before the first ;LAYER:N marker.
+        // Previously this header was silently overwritten in SplitByLayer; now it's preserved.
+        if (!string.IsNullOrWhiteSpace(header))
+        {
+            output.AppendLine("; --- Print startup (Cura header) ---");
+            output.Append(header);
+            if (!header.EndsWith('\n')) output.AppendLine();
+        }
+
+        int printStart = -1; // -1 so the first flush includes layer 0
 
         // Use the actual machined layers from the parsed toolpath (sorted ascending).
         // This correctly handles both manual-interval and auto-machining-frequency scheduling.
@@ -133,7 +153,8 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
             }
         }
 
-        // JobEnd blocks
+        // Bookend bottom: AfterPrinting → JobEnd
+        AppendCustomBlocks(output, request.EnabledCustomBlocks, GCodeTrigger.AfterPrinting, plan, ref stepIndex);
         AppendCustomBlocks(output, request.EnabledCustomBlocks, GCodeTrigger.JobEnd, plan, ref stepIndex);
 
         output.AppendLine("; ============================================================");
@@ -158,15 +179,16 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
     // ── Private helpers ───────────────────────────────────────────────────────
 
     /// <summary>
-    /// Splits the raw print G-code into a dictionary keyed by layer index.
-    /// Content for each layer includes the ;LAYER:N header line itself.
-    /// Layer 0 content (startup / first layer) is stored at key 0.
+    /// Splits the raw print G-code into a header (lines before the first <c>;LAYER:N</c>
+    /// marker — Cura's startup G-code) and a dictionary keyed by layer index.
+    /// Content for each layer includes the <c>;LAYER:N</c> marker line itself.
     /// </summary>
-    private static Dictionary<int, string> SplitByLayer(string printGCode)
+    private static (string Header, Dictionary<int, string> Segments) SplitByLayer(string printGCode)
     {
-        var result = new Dictionary<int, string>();
+        var segments = new Dictionary<int, string>();
         var lines = printGCode.Split('\n');
-        var currentLayer = 0;
+        int? currentLayer = null;
+        var header = new StringBuilder();
         var current = new StringBuilder();
 
         foreach (var rawLine in lines)
@@ -174,9 +196,12 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
             var match = LayerMarkerRegex().Match(rawLine);
             if (match.Success)
             {
-                // Store accumulated lines for the layer we just finished
-                if (current.Length > 0)
-                    result[currentLayer] = current.ToString();
+                // Flush whatever was being accumulated. Before the first marker that's
+                // the print startup header; after that it's the previous layer's content.
+                if (currentLayer is null)
+                    header.Append(current.ToString());
+                else
+                    segments[currentLayer.Value] = current.ToString();
 
                 currentLayer = int.Parse(match.Groups[1].Value);
                 current.Clear();
@@ -184,11 +209,14 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
             current.AppendLine(rawLine);
         }
 
-        // Store the final layer
-        if (current.Length > 0)
-            result[currentLayer] = current.ToString();
+        // Flush whatever is still buffered: either pure header (no layer markers in file),
+        // or the final layer's content (which carries Cura's end G-code as a tail).
+        if (currentLayer is null)
+            header.Append(current.ToString());
+        else if (current.Length > 0)
+            segments[currentLayer.Value] = current.ToString();
 
-        return result;
+        return (header.ToString(), segments);
     }
 
     /// <summary>Concatenates layer G-code fragments from 'from' to 'to' inclusive.</summary>
