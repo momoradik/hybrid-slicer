@@ -20,6 +20,12 @@ public interface IMachineDriver : IAsyncDisposable
         CancellationToken cancellationToken = default);
 
     event EventHandler<MachineStatusEvent>? StatusChanged;
+
+    // ── Duet proxy support ──────────────────────────────────────────────
+    string? ConnectedBaseUrl { get; }
+    Task<string> ProxyGetAsync(string relativePath, CancellationToken ct = default);
+    Task<byte[]> ProxyGetBytesAsync(string relativePath, CancellationToken ct = default);
+    Task<string> ProxyPostAsync(string relativePath, byte[] body, string contentType, CancellationToken ct = default);
 }
 
 public sealed record MachineProgress(int LineNumber, int TotalLines, string LastResponse);

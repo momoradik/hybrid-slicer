@@ -146,6 +146,15 @@ public sealed class TcpMachineDriver : IMachineDriver
         StatusChanged?.Invoke(this, new MachineStatusEvent(response, extTemp, bedTemp, null, DateTime.UtcNow));
     }
 
+    // ── Duet proxy (not supported over TCP) ────────────────────────────
+    public string? ConnectedBaseUrl => null;
+    public Task<string> ProxyGetAsync(string relativePath, CancellationToken ct = default)
+        => throw new NotSupportedException("Duet proxy requires HTTP driver");
+    public Task<byte[]> ProxyGetBytesAsync(string relativePath, CancellationToken ct = default)
+        => throw new NotSupportedException("Duet proxy requires HTTP driver");
+    public Task<string> ProxyPostAsync(string relativePath, byte[] body, string contentType, CancellationToken ct = default)
+        => throw new NotSupportedException("Duet proxy requires HTTP driver");
+
     private void EnsureConnected()
     {
         if (!IsConnected)

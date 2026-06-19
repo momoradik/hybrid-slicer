@@ -10,6 +10,7 @@ import HybridPlanner from './pages/HybridPlanner'
 import HybridPreview from './pages/HybridPreview'
 import CustomGCode from './pages/CustomGCode'
 import Calibration from './pages/Calibration'
+import Printer from './pages/Printer'
 import PelletCalibration from './pages/PelletCalibration'
 import BrandingPage from './pages/BrandingPage'
 import GCodePage from './pages/GCodePage'
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="hybrid-preview"     element={<HybridPreview />} />
             <Route path="custom-gcode"       element={<CustomGCode />} />
             <Route path="calibration"        element={<Calibration />} />
+            <Route path="printer"           element={<Printer />} />
             <Route path="pellet-calibration" element={<PelletCalibration />} />
             <Route path="jobs/:id/gcode"     element={<GCodePage />} />
             {import.meta.env.DEV && (

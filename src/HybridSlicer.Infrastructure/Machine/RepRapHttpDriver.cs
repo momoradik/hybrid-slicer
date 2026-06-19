@@ -226,6 +226,36 @@ public sealed class RepRapHttpDriver : IMachineDriver
         }
     }
 
+    // ── Duet proxy support ────────────────────────────────────────────
+
+    public string? ConnectedBaseUrl => _baseUrl;
+
+    public async Task<string> ProxyGetAsync(string relativePath, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        var resp = await _http.GetAsync($"{_baseUrl}/{relativePath}", ct);
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadAsStringAsync(ct);
+    }
+
+    public async Task<byte[]> ProxyGetBytesAsync(string relativePath, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        var resp = await _http.GetAsync($"{_baseUrl}/{relativePath}", ct);
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadAsByteArrayAsync(ct);
+    }
+
+    public async Task<string> ProxyPostAsync(string relativePath, byte[] body, string contentType, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        var content = new ByteArrayContent(body);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+        var resp = await _http.PostAsync($"{_baseUrl}/{relativePath}", content, ct);
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadAsStringAsync(ct);
+    }
+
     private void EnsureConnected()
     {
         if (!IsConnected)
