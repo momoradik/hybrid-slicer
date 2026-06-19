@@ -32,8 +32,13 @@ public class DuetProxyController : ControllerBase
             return File(bytes, "application/octet-stream");
         }
 
-        var json = await _driver.ProxyGetAsync(fullPath, ct);
-        return Content(json, "application/json");
+        var responseBody = await _driver.ProxyGetAsync(fullPath, ct);
+
+        // rr_reply returns plain text, everything else returns JSON
+        var contentType = path.StartsWith("rr_reply", StringComparison.OrdinalIgnoreCase)
+            ? "text/plain"
+            : "application/json";
+        return Content(responseBody, contentType);
     }
 
     /// <summary>POST proxy — used for rr_upload and similar.</summary>

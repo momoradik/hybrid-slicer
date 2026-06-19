@@ -156,24 +156,53 @@ export interface DuetFileList {
   err?: number
 }
 
-// ── Status type mapping ──────────────────────────────────────────────────
+// ── Status display helpers ───────────────────────────────────────────────
 
-export function statusChar(s: string): string {
-  switch (s) {
-    case 'I': return 'Idle'
-    case 'P': return 'Printing'
-    case 'S': return 'Stopped'
-    case 'C': return 'Configuring'
-    case 'D': return 'Decelerating'
-    case 'R': return 'Resuming'
-    case 'H': return 'Halted'
-    case 'F': return 'Flashing Firmware'
-    case 'T': return 'Changing Tool'
-    case 'B': return 'Busy'
-    case 'M': return 'Simulating'
-    case 'O': return 'Off'
-    default: return s
+/** Convert RRF 3.x status string to a display label.
+ *  RRF 3.x rr_model returns full words: "idle", "processing", "simulating", etc.
+ *  RRF 2.x rr_status returns single chars: "I", "P", "S", etc.
+ *  We handle both. */
+export function statusLabel(s: string): string {
+  // RRF 3.x full strings
+  const map3: Record<string, string> = {
+    idle: 'Idle', busy: 'Busy', processing: 'Printing', paused: 'Paused',
+    resuming: 'Resuming', halted: 'Halted', flashing: 'Flashing Firmware',
+    changingTool: 'Changing Tool', simulating: 'Simulating', off: 'Off',
+    configuring: 'Configuring', updating: 'Updating',
   }
+  // RRF 2.x single-char codes
+  const map2: Record<string, string> = {
+    I: 'Idle', P: 'Printing', S: 'Stopped', C: 'Configuring',
+    D: 'Decelerating', R: 'Resuming', H: 'Halted',
+    F: 'Flashing Firmware', T: 'Changing Tool', B: 'Busy',
+    M: 'Simulating', O: 'Off',
+  }
+  return map3[s] ?? map2[s] ?? s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+/** Check if status means "currently printing" (works for both RRF 2.x and 3.x) */
+export function isPrinting(s: string): boolean {
+  return s === 'P' || s === 'processing' || s === 'resuming' || s === 'R'
+}
+
+/** Check if status means "paused" (works for both RRF 2.x and 3.x) */
+export function isPaused(s: string): boolean {
+  return s === 'S' || s === 'paused' || s === 'D'
+}
+
+/** Status color class for badge display */
+export function statusColor(s: string): string {
+  if (isPrinting(s)) return 'bg-blue-900 text-blue-300 animate-pulse'
+  if (isPaused(s)) return 'bg-yellow-900 text-yellow-300'
+  const colors: Record<string, string> = {
+    idle: 'bg-green-900 text-green-300', I: 'bg-green-900 text-green-300',
+    halted: 'bg-red-900 text-red-300', H: 'bg-red-900 text-red-300',
+    off: 'bg-gray-700 text-gray-400', O: 'bg-gray-700 text-gray-400',
+    busy: 'bg-yellow-900 text-yellow-300', B: 'bg-yellow-900 text-yellow-300',
+    simulating: 'bg-purple-900 text-purple-300', M: 'bg-purple-900 text-purple-300',
+    configuring: 'bg-yellow-900 text-yellow-300', C: 'bg-yellow-900 text-yellow-300',
+  }
+  return colors[s] ?? 'bg-gray-700 text-gray-300'
 }
 
 // ── API Calls ────────────────────────────────────────────────────────────

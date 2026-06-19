@@ -1,5 +1,5 @@
 import { useDuetStore, useHeaters, useAxes, useTools, useJob, useMachineStatus } from '../../store/duetStore'
-import { statusChar } from '../../services/duetApi'
+import { statusLabel, statusColor, isPrinting, isPaused } from '../../services/duetApi'
 import * as duetApi from '../../services/duetApi'
 import { useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
@@ -55,19 +55,9 @@ function TempChart() {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const label = statusChar(status)
-  const colors: Record<string, string> = {
-    I: 'bg-green-900 text-green-300',
-    P: 'bg-blue-900 text-blue-300 animate-pulse',
-    S: 'bg-red-900 text-red-300',
-    H: 'bg-red-900 text-red-300',
-    B: 'bg-yellow-900 text-yellow-300 animate-pulse',
-    M: 'bg-purple-900 text-purple-300',
-    C: 'bg-yellow-900 text-yellow-300',
-  }
   return (
-    <span className={`px-3 py-1 rounded-full text-xs font-medium ${colors[status] ?? 'bg-gray-700 text-gray-300'}`}>
-      {label}
+    <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColor(status)}`}>
+      {statusLabel(status)}
     </span>
   )
 }
@@ -179,7 +169,9 @@ function PositionDisplay() {
 
 function SpeedFactors() {
   const model = useDuetStore(s => s.model)
-  const speedFactor = model?.move?.speedFactor ?? 100
+  // RRF 3.x rr_model: speedFactor is a fraction (1.0 = 100%)
+  const speedFactorRaw = model?.move?.speedFactor ?? 1.0
+  const speedPct = Math.round(speedFactorRaw * 100)
   const extruders = model?.move?.extruders ?? []
   const babystep = model?.move?.babystepZ ?? 0
 
@@ -188,21 +180,24 @@ function SpeedFactors() {
       <div className="flex items-center justify-between">
         <span className="text-sm text-gray-400">Speed Factor</span>
         <div className="flex items-center gap-2">
-          <button onClick={() => duetApi.sendGCode(`M220 S${Math.max(10, speedFactor - 10)}`)} className="px-2 py-0.5 bg-gray-700 rounded text-xs hover:bg-gray-600">-10</button>
-          <span className="font-mono text-white w-12 text-center">{Math.round(speedFactor)}%</span>
-          <button onClick={() => duetApi.sendGCode(`M220 S${speedFactor + 10}`)} className="px-2 py-0.5 bg-gray-700 rounded text-xs hover:bg-gray-600">+10</button>
+          <button onClick={() => duetApi.sendGCode(`M220 S${Math.max(10, speedPct - 10)}`)} className="px-2 py-0.5 bg-gray-700 rounded text-xs hover:bg-gray-600">-10</button>
+          <span className="font-mono text-white w-12 text-center">{speedPct}%</span>
+          <button onClick={() => duetApi.sendGCode(`M220 S${Math.min(300, speedPct + 10)}`)} className="px-2 py-0.5 bg-gray-700 rounded text-xs hover:bg-gray-600">+10</button>
         </div>
       </div>
-      {extruders.map((ext, i) => (
-        <div key={i} className="flex items-center justify-between">
-          <span className="text-sm text-gray-400">Extruder {i} Factor</span>
-          <div className="flex items-center gap-2">
-            <button onClick={() => duetApi.sendGCode(`M221 D${i} S${Math.max(50, (ext.factor * 100) - 5)}`)} className="px-2 py-0.5 bg-gray-700 rounded text-xs hover:bg-gray-600">-5</button>
-            <span className="font-mono text-white w-12 text-center">{Math.round(ext.factor * 100)}%</span>
-            <button onClick={() => duetApi.sendGCode(`M221 D${i} S${(ext.factor * 100) + 5}`)} className="px-2 py-0.5 bg-gray-700 rounded text-xs hover:bg-gray-600">+5</button>
+      {extruders.map((ext, i) => {
+        const extPct = Math.round(ext.factor * 100)
+        return (
+          <div key={i} className="flex items-center justify-between">
+            <span className="text-sm text-gray-400">Extruder {i} Factor</span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => duetApi.sendGCode(`M221 D${i} S${Math.max(50, extPct - 5)}`)} className="px-2 py-0.5 bg-gray-700 rounded text-xs hover:bg-gray-600">-5</button>
+              <span className="font-mono text-white w-12 text-center">{extPct}%</span>
+              <button onClick={() => duetApi.sendGCode(`M221 D${i} S${Math.min(200, extPct + 5)}`)} className="px-2 py-0.5 bg-gray-700 rounded text-xs hover:bg-gray-600">+5</button>
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
       <div className="flex items-center justify-between">
         <span className="text-sm text-gray-400">Baby Stepping Z</span>
         <div className="flex items-center gap-2">
@@ -219,7 +214,7 @@ function JobProgress() {
   const job = useJob()
   const status = useMachineStatus()
 
-  if (!job?.file?.fileName && status !== 'P') {
+  if (!job?.file?.fileName && !isPrinting(status)) {
     return (
       <div className="text-center text-gray-600 py-4 text-sm">
         No job running
@@ -262,13 +257,13 @@ function JobProgress() {
           <div className="text-white font-mono">{formatTime(job?.timesLeft?.file ?? null)}</div>
         </div>
       </div>
-      {status === 'P' && (
+      {isPrinting(status) && (
         <div className="flex gap-2">
           <button onClick={() => duetApi.sendGCode('M25')} className="flex-1 px-3 py-1.5 bg-yellow-700 hover:bg-yellow-600 text-white rounded-lg text-xs">Pause</button>
           <button onClick={() => { if (confirm('Cancel the current print?')) duetApi.sendGCode('M0') }} className="flex-1 px-3 py-1.5 bg-red-700 hover:bg-red-600 text-white rounded-lg text-xs">Cancel</button>
         </div>
       )}
-      {status === 'S' && (
+      {isPaused(status) && (
         <button onClick={() => duetApi.sendGCode('M24')} className="w-full px-3 py-1.5 bg-green-700 hover:bg-green-600 text-white rounded-lg text-xs">Resume</button>
       )}
     </div>

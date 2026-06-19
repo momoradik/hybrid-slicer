@@ -38,7 +38,7 @@ function GeneralSettings() {
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
         <h3 className="text-sm font-medium text-white mb-3">Machine State</h3>
         <div className="space-y-2">
-          <InfoRow label="Status" value={duetApi.statusChar(model?.state?.status ?? 'I')} />
+          <InfoRow label="Status" value={duetApi.statusLabel(model?.state?.status ?? 'idle')} />
           <InfoRow label="Machine Mode" value={model?.state?.machineMode ?? 'FFF'} />
           <InfoRow label="Current Tool" value={model?.state?.currentTool !== undefined && model.state.currentTool >= 0 ? `T${model.state.currentTool}` : 'None'} />
           {model?.state?.displayMessage && (

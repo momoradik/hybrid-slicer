@@ -99,5 +99,5 @@ export function useJob(): DuetJob | null {
 }
 
 export function useMachineStatus(): string {
-  return useDuetStore(s => s.model?.state?.status ?? 'I')
+  return useDuetStore(s => s.model?.state?.status ?? 'idle')
 }
