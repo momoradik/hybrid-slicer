@@ -42,8 +42,14 @@ public sealed class MaterialsController : ControllerBase
     {
         var m = await _repo.GetByIdAsync(id, ct);
         if (m is null) return NotFound();
-        // Full replacement — create a new one and soft-delete old in full impl.
-        // For scaffold, just return 200.
+
+        m.Update(
+            req.Name, req.Type,
+            req.PrintTempMin, req.PrintTempMax,
+            req.BedTempMin, req.BedTempMax,
+            req.Density, req.DiameterMm);
+
+        await _repo.UpdateAsync(m, ct);
         return Ok(m);
     }
 

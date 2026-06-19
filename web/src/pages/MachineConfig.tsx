@@ -791,12 +791,15 @@ function validateOffsets(f: MachineForm): OffsetIssue[] {
   const issues: OffsetIssue[] = []
 
   // ── Machine travel vs bed size ─────────────────────────────────────────
-  if (f.bedWidthMm > f.travelXMm)
-    issues.push({ level: 'error', message: `Bed width (${f.bedWidthMm} mm) exceeds machine X travel (${f.travelXMm} mm). The bed cannot be larger than the machine.` })
-  if (f.bedDepthMm > f.travelYMm)
-    issues.push({ level: 'error', message: `Bed depth (${f.bedDepthMm} mm) exceeds machine Y travel (${f.travelYMm} mm). The bed cannot be larger than the machine.` })
-  if (f.bedHeightMm > f.travelZMm)
-    issues.push({ level: 'error', message: `Bed height (${f.bedHeightMm} mm) exceeds machine Z travel (${f.travelZMm} mm).` })
+  for (const bed of f.beds) {
+    const label = f.beds.length > 1 ? ` (Bed ${bed.index + 1})` : ''
+    if (bed.widthMm > f.travelXMm)
+      issues.push({ level: 'error', message: `Bed width${label} (${bed.widthMm} mm) exceeds machine X travel (${f.travelXMm} mm). The bed cannot be larger than the machine.` })
+    if (bed.depthMm > f.travelYMm)
+      issues.push({ level: 'error', message: `Bed depth${label} (${bed.depthMm} mm) exceeds machine Y travel (${f.travelYMm} mm). The bed cannot be larger than the machine.` })
+    if (bed.heightMm > f.travelZMm)
+      issues.push({ level: 'error', message: `Bed height${label} (${bed.heightMm} mm) exceeds machine Z travel (${f.travelZMm} mm).` })
+  }
 
   // ── Multi-extruder: nozzle spacing required ────────────────────────────
   if (f.extruderCount > 1) {

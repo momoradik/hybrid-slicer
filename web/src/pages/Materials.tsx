@@ -13,6 +13,10 @@ export default function Materials() {
     mutationFn: materialsApi.create,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setForm(null) },
   })
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => materialsApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); setForm(null) },
+  })
   const deleteMutation = useMutation({
     mutationFn: materialsApi.delete,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }) },
@@ -22,12 +26,18 @@ export default function Materials() {
     setForm({ name: '', type: 'PLA', printTempMinDegC: 200, printTempMaxDegC: 230, bedTempMinDegC: 50, bedTempMaxDegC: 70, diameterMm: 1.75 })
   }
 
+  const openEdit = (m: Material) => {
+    setForm({ ...m })
+  }
+
   const set = (k: string, v: string | number) =>
     setForm(f => f ? { ...f, [k]: v } : f)
 
+  const isEditing = !!(form && form.id)
+
   const handleSave = () => {
     if (!form || !form.name?.trim()) return
-    createMutation.mutate({
+    const payload = {
       name: form.name,
       type: form.type,
       printTempMin: form.printTempMinDegC,
@@ -35,7 +45,12 @@ export default function Materials() {
       bedTempMin: form.bedTempMinDegC,
       bedTempMax: form.bedTempMaxDegC,
       diameterMm: form.diameterMm,
-    } as any)
+    } as any
+    if (isEditing) {
+      updateMutation.mutate({ id: form.id!, data: payload })
+    } else {
+      createMutation.mutate(payload)
+    }
   }
 
   return (
@@ -59,8 +74,12 @@ export default function Materials() {
                 Bed {m.bedTempMinDegC}–{m.bedTempMaxDegC}°C
               </p>
             </div>
-            <button onClick={() => { if (confirm('Delete this material?')) deleteMutation.mutate(m.id) }}
-              className="text-sm text-gray-400 hover:text-red-400 px-3 py-1 rounded bg-gray-800">Delete</button>
+            <div className="flex gap-2">
+              <button onClick={() => openEdit(m)}
+                className="text-sm text-gray-400 hover:text-blue-400 px-3 py-1 rounded bg-gray-800">Edit</button>
+              <button onClick={() => { if (confirm('Delete this material?')) deleteMutation.mutate(m.id) }}
+                className="text-sm text-gray-400 hover:text-red-400 px-3 py-1 rounded bg-gray-800">Delete</button>
+            </div>
           </div>
         ))}
         {materials.length === 0 && (
@@ -71,7 +90,7 @@ export default function Materials() {
       {form && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-lg space-y-4">
-            <h3 className="font-semibold text-white">Add Material</h3>
+            <h3 className="font-semibold text-white">{isEditing ? 'Edit Material' : 'Add Material'}</h3>
             <div className="grid grid-cols-2 gap-3">
               <MField label="Name">
                 <input className="input w-full" value={form.name ?? ''} onChange={e => set('name', e.target.value)} placeholder="My PLA" />
@@ -104,9 +123,9 @@ export default function Materials() {
                 className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm">Cancel</button>
               <DisabledHint when={!form.name?.trim()} reason="Enter a material name to save.">
                 <button onClick={handleSave}
-                  disabled={!form.name?.trim() || createMutation.isPending}
+                  disabled={!form.name?.trim() || createMutation.isPending || updateMutation.isPending}
                   className="px-4 py-2 bg-primary/80 hover:bg-primary disabled:opacity-40 text-white rounded-lg text-sm">
-                  {createMutation.isPending ? 'Saving…' : 'Save'}
+                  {(createMutation.isPending || updateMutation.isPending) ? 'Saving…' : 'Save'}
                 </button>
               </DisabledHint>
             </div>

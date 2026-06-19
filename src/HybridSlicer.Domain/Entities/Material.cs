@@ -49,4 +49,28 @@ public class Material
             UpdatedAt = DateTime.UtcNow
         };
     }
+
+    public void Update(
+        string name,
+        string type,
+        int printTempMin,
+        int printTempMax,
+        int bedTempMin,
+        int bedTempMax,
+        double density,
+        double diameterMm)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new DomainException("INVALID_NAME", "Material name must not be empty.");
+
+        Name = name.Trim();
+        Type = type.Trim();
+        PrintTempMinDegC = printTempMin;
+        PrintTempMaxDegC = printTempMax;
+        BedTempMinDegC = bedTempMin;
+        BedTempMaxDegC = bedTempMax;
+        DensityGPerCm3 = density;
+        DiameterMm = diameterMm;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }
