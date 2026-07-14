@@ -1,5 +1,12 @@
 using System.Diagnostics;
-using System.Drawing.Drawing2D;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Text.Json;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
 
 namespace HybridSlicer.Launcher;
 
@@ -7,21 +14,14 @@ namespace HybridSlicer.Launcher;
 public sealed class LauncherForm : Form
 {
     private readonly Process _server;
-    private readonly string  _networkIp;
+    private string  _networkIp;
     private readonly string? _curaPath;
     private readonly System.Windows.Forms.Timer _healthTimer;
+    private readonly GitHubUpdateChecker _updater;
+    private readonly WebView2 _webView;
 
-    // dark-mode palette
-    private static readonly Color BgDark    = Color.FromArgb(24,  24,  27);
-    private static readonly Color BgCard    = Color.FromArgb(39,  39,  42);
-    private static readonly Color Accent    = Color.FromArgb(99,  207, 134);
-    private static readonly Color AccentNet = Color.FromArgb(251, 146, 60);
-    private static readonly Color Muted     = Color.FromArgb(161, 161, 170);
-    private static readonly Color BtnBlue   = Color.FromArgb(59,  130, 246);
-    private static readonly Color BtnRed    = Color.FromArgb(220, 38,  38);
-    private static readonly Color BtnGray   = Color.FromArgb(63,  63,  70);
-
-    private Label _statusDot = null!;
+    private string _serverStatus = "starting";
+    private int _port = 5000;
 
     public LauncherForm(Process server, string networkIp, string? curaPath)
     {
@@ -30,94 +30,38 @@ public sealed class LauncherForm : Form
         _curaPath  = curaPath;
 
         _healthTimer = new System.Windows.Forms.Timer { Interval = 2000 };
-        _healthTimer.Tick += (_, _) => UpdateStatus();
+        _healthTimer.Tick += (_, _) => PollServerStatus();
 
-        BuildUi();
-        _healthTimer.Start();
-    }
+        _updater = new GitHubUpdateChecker();
+        _updater.UpdateAvailable += OnUpdateAvailable;
+        _updater.DownloadProgress += OnDownloadProgress;
+        _updater.UpdateReady += OnUpdateReady;
+        _updater.UpdateError += OnUpdateError;
 
-    private void BuildUi()
-    {
-        Text            = "HybridSlicer Launcher";
-        Size            = new Size(460, 310);
-        MinimumSize     = Size;
-        MaximumSize     = Size;
+        Text            = "HybridSlicer";
+        AutoScaleMode   = AutoScaleMode.None;
+        using (var g = CreateGraphics())
+        {
+            float scale = g.DpiX / 96f;
+            ClientSize = new Size((int)(480 * scale), (int)(580 * scale));
+        }
+        FormBorderStyle = FormBorderStyle.FixedSingle;
+        MinimizeBox     = true;
         MaximizeBox     = false;
         StartPosition   = FormStartPosition.CenterScreen;
-        BackColor       = BgDark;
-        ForeColor       = Color.White;
-        FormBorderStyle = FormBorderStyle.FixedSingle;
+        BackColor       = Color.FromArgb(15, 23, 42);
 
-        // ── Title bar area ────────────────────────────────────────────────────
-        var titleLabel = MakeLabel("HybridSlicer", new Point(20, 20),
-            new Font("Segoe UI", 14, FontStyle.Bold));
-        titleLabel.ForeColor = Color.White;
+        Icon = BuildAppIcon();
+        EnableDarkTitleBar();
 
-        _statusDot = MakeLabel("● Starting…", new Point(20, 52));
-        _statusDot.ForeColor = Color.Yellow;
-
-        // ── URL card ──────────────────────────────────────────────────────────
-        var card = new Panel
+        _webView = new WebView2
         {
-            Location  = new Point(14, 82),
-            Size      = new Size(416, 100),
-            BackColor = BgCard,
+            Dock = DockStyle.Fill,
+            DefaultBackgroundColor = Color.FromArgb(15, 23, 42),
         };
-        RoundPanel(card, 8);
-        Controls.Add(card);
+        Controls.Add(_webView);
 
-        var localLabel = MakeLabel("Local :", new Point(14, 14), parent: card);
-        localLabel.ForeColor = Muted;
-        localLabel.Size      = new Size(60, 20);
-
-        var localLink = MakeLink("http://localhost:5000",
-            new Point(80, 14), "http://localhost:5000", card);
-        localLink.ForeColor = Accent;
-
-        var netLabel = MakeLabel("Network :", new Point(14, 48), parent: card);
-        netLabel.ForeColor = Muted;
-        netLabel.Size      = new Size(60, 20);
-
-        var netText = $"http://{_networkIp}:5000";
-        var netLink = MakeLink(netText, new Point(80, 48), netText, card);
-        netLink.Font      = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-        netLink.ForeColor = AccentNet;
-
-        // ── Cura status ───────────────────────────────────────────────────────
-        var curaLabel = MakeLabel(
-            _curaPath is not null
-                ? $"CuraEngine: auto-detected ✓"
-                : "CuraEngine: not found — set path manually in appsettings.json",
-            new Point(20, 192));
-        curaLabel.ForeColor = _curaPath is not null ? Accent : Color.FromArgb(248, 113, 113);
-        curaLabel.Size      = new Size(420, 18);
-
-        // ── Buttons ───────────────────────────────────────────────────────────
-        var btnOpen = MakeButton("Open in Browser", new Point(20, 222), BtnBlue, 140);
-        btnOpen.Click += (_, _) => OpenUrl($"http://{_networkIp}:5000");
-
-        var btnCopy = MakeButton("Copy URL", new Point(168, 222), BtnGray, 100);
-        btnCopy.Click += (_, _) =>
-        {
-            Clipboard.SetText($"http://{_networkIp}:5000");
-            btnCopy.Text = "Copied!";
-            Task.Delay(1500).ContinueWith(_ => Invoke(() => btnCopy.Text = "Copy URL"));
-        };
-
-        var btnLogs = MakeButton("View Logs", new Point(276, 222), BtnGray, 90);
-        btnLogs.Click += (_, _) =>
-        {
-            var logPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "logs", "server.log");
-            if (File.Exists(logPath))
-                Process.Start(new ProcessStartInfo("notepad.exe", logPath) { UseShellExecute = true });
-            else
-                MessageBox.Show("No log file found.", "Logs", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        };
-
-        var btnStop = MakeButton("Stop", new Point(374, 222), BtnRed, 66);
-        btnStop.Click += (_, _) => Close();
-
-        Controls.AddRange(new Control[] { titleLabel, _statusDot, curaLabel, btnOpen, btnCopy, btnLogs, btnStop });
+        Load += async (_, _) => await InitWebView();
 
         FormClosed += (_, _) =>
         {
@@ -126,95 +70,206 @@ public sealed class LauncherForm : Form
         };
     }
 
-    private void UpdateStatus()
+    private async Task InitWebView()
     {
-        if (_server.HasExited)
-        {
-            _statusDot.Text      = "● Server stopped";
-            _statusDot.ForeColor = Color.FromArgb(248, 113, 113);
-            return;
-        }
+        var userDataFolder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "HybridSlicer", "WebView2");
 
-        // Quick TCP check on port 5000
+        var env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+        await _webView.EnsureCoreWebView2Async(env);
+
+        // Settings
+        _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+        _webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+        _webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+        _webView.CoreWebView2.Settings.IsZoomControlEnabled = false;
+
+        // Handle messages from JS
+        _webView.CoreWebView2.WebMessageReceived += OnWebMessage;
+
+        // Load embedded HTML
+        var html = LoadEmbeddedHtml();
+        _webView.CoreWebView2.NavigateToString(html);
+
+        // Wait for page load, then push initial state + logo
+        _webView.CoreWebView2.NavigationCompleted += (_, _) =>
+        {
+            PushState();
+            PushLogo();
+            _healthTimer.Start();
+            _updater.Start();
+        };
+    }
+
+    private static string LoadEmbeddedHtml()
+    {
+        using var stream = Assembly.GetExecutingAssembly()
+            .GetManifestResourceStream("launcher.html")!;
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
+    // ── C# → JS ─────────────────────────────────────────────────────────────
+
+    private void PushState()
+    {
+        var state = new
+        {
+            lanIP = _networkIp,
+            port = _port,
+            url = $"http://{_networkIp}:{_port}",
+            status = _serverStatus,
+            curaPath = _curaPath ?? "",
+            version = _updater.CurrentVersion,
+        };
+        var json = JsonSerializer.Serialize(state);
+        ExecuteScript($"applyStatus({json})");
+    }
+
+    private void ExecuteScript(string script)
+    {
+        if (_webView.CoreWebView2 is null) return;
+        try { _webView.CoreWebView2.ExecuteScriptAsync(script); } catch { }
+    }
+
+    // ── JS → C# ─────────────────────────────────────────────────────────────
+
+    private async void OnWebMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
         try
         {
-            using var tcp = new System.Net.Sockets.TcpClient();
-            var result = tcp.BeginConnect("127.0.0.1", 5000, null, null);
-            if (result.AsyncWaitHandle.WaitOne(300))
+            var msg = JsonSerializer.Deserialize<JsonElement>(e.WebMessageAsJson);
+            var action = msg.GetProperty("action").GetString();
+
+            switch (action)
             {
-                tcp.EndConnect(result);
-                _statusDot.Text      = "● Running";
-                _statusDot.ForeColor = Accent;
-                return;
+                case "open-browser":
+                    OpenUrl($"http://{_networkIp}:{_port}");
+                    break;
+
+                case "get-all-ips":
+                    var ips = GetAllLanIPs();
+                    var ipsJson = JsonSerializer.Serialize(ips);
+                    ExecuteScript($"loadIPs({ipsJson})");
+                    break;
+
+                case "test-ip":
+                    var testIp = msg.GetProperty("ip").GetString()!;
+                    var testPort = msg.GetProperty("port").GetInt32();
+                    var reachable = await TestIpAsync(testIp, testPort);
+                    ExecuteScript($"ipTestResult('{testIp}', {(reachable ? "true" : "false")})");
+                    break;
+
+                case "set-ip":
+                    var newIp = msg.GetProperty("ip").GetString()!;
+                    _networkIp = newIp;
+                    var newUrl = $"http://{_networkIp}:{_port}";
+                    ExecuteScript($"ipChanged('{_networkIp}', '{newUrl}')");
+                    break;
+
+                case "check-for-update":
+                    await _updater.CheckForUpdateAsync();
+                    break;
+
+                case "download-update":
+                    await _updater.DownloadUpdateAsync();
+                    break;
+
+                case "install-update":
+                    _updater.InstallUpdate();
+                    break;
             }
         }
-        catch { }
-
-        _statusDot.Text      = "● Starting…";
-        _statusDot.ForeColor = Color.Yellow;
-    }
-
-    // ── Factory helpers ───────────────────────────────────────────────────────
-
-    private Label MakeLabel(string text, Point loc, Font? font = null, Control? parent = null)
-    {
-        var lbl = new Label
+        catch (Exception ex)
         {
-            Text      = text,
-            AutoSize  = true,
-            Location  = loc,
-            Font      = font ?? new Font("Segoe UI", 9f),
-            BackColor = Color.Transparent,
-            ForeColor = Color.White,
-        };
-        (parent ?? this).Controls.Add(lbl);
-        return lbl;
+            Debug.WriteLine($"WebMessage error: {ex.Message}");
+        }
     }
 
-    private LinkLabel MakeLink(string text, Point loc, string url, Control parent)
+    // ── Update events → JS ──────────────────────────────────────────────────
+
+    private void OnUpdateAvailable(string version)
     {
-        var lnk = new LinkLabel
+        if (InvokeRequired) { Invoke(() => OnUpdateAvailable(version)); return; }
+        ExecuteScript($"onUpdateAvailable('{version}')");
+    }
+
+    private void OnDownloadProgress(int percent)
+    {
+        if (InvokeRequired) { Invoke(() => OnDownloadProgress(percent)); return; }
+        ExecuteScript($"onDownloadProgress({percent})");
+    }
+
+    private void OnUpdateReady(string path)
+    {
+        if (InvokeRequired) { Invoke(() => OnUpdateReady(path)); return; }
+        ExecuteScript("onUpdateDownloaded()");
+    }
+
+    private void OnUpdateError(string message)
+    {
+        if (InvokeRequired) { Invoke(() => OnUpdateError(message)); return; }
+        var escaped = message.Replace("'", "\\'").Replace("\n", " ");
+        ExecuteScript($"onUpdateError('{escaped}')");
+    }
+
+    // ── Server health polling ───────────────────────────────────────────────
+
+    private void PollServerStatus()
+    {
+        string newStatus;
+        if (_server.HasExited)
         {
-            Text      = text,
-            AutoSize  = true,
-            Location  = loc,
-            Font      = new Font("Segoe UI", 9f),
-            BackColor = Color.Transparent,
-            LinkColor = Accent,
-            ActiveLinkColor = Color.White,
-        };
-        lnk.LinkClicked += (_, _) => OpenUrl(url);
-        parent.Controls.Add(lnk);
-        return lnk;
-    }
-
-    private Button MakeButton(string text, Point loc, Color bg, int width)
-    {
-        var btn = new Button
+            newStatus = "error";
+        }
+        else
         {
-            Text      = text,
-            Location  = loc,
-            Size      = new Size(width, 34),
-            BackColor = bg,
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Font      = new Font("Segoe UI", 9f),
-            Cursor    = Cursors.Hand,
-        };
-        btn.FlatAppearance.BorderSize = 0;
-        Controls.Add(btn);
-        return btn;
+            try
+            {
+                using var tcp = new TcpClient();
+                var result = tcp.BeginConnect("127.0.0.1", _port, null, null);
+                newStatus = result.AsyncWaitHandle.WaitOne(300) ? "running" : "starting";
+                if (newStatus == "running") tcp.EndConnect(result);
+            }
+            catch { newStatus = "starting"; }
+        }
+
+        if (newStatus != _serverStatus)
+        {
+            _serverStatus = newStatus;
+            PushState();
+        }
     }
 
-    private static void RoundPanel(Panel p, int radius)
+    // ── Network helpers ─────────────────────────────────────────────────────
+
+    private static List<object> GetAllLanIPs()
     {
-        var path = new GraphicsPath();
-        path.AddArc(0, 0, radius * 2, radius * 2, 180, 90);
-        path.AddArc(p.Width - radius * 2, 0, radius * 2, radius * 2, 270, 90);
-        path.AddArc(p.Width - radius * 2, p.Height - radius * 2, radius * 2, radius * 2, 0, 90);
-        path.AddArc(0, p.Height - radius * 2, radius * 2, radius * 2, 90, 90);
-        path.CloseAllFigures();
-        p.Region = new Region(path);
+        var result = new List<object>();
+        foreach (var iface in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (iface.OperationalStatus != OperationalStatus.Up) continue;
+            foreach (var addr in iface.GetIPProperties().UnicastAddresses)
+            {
+                if (addr.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                if (IPAddress.IsLoopback(addr.Address)) continue;
+                result.Add(new { ip = addr.Address.ToString(), name = iface.Name });
+            }
+        }
+        return result;
+    }
+
+    private static async Task<bool> TestIpAsync(string ip, int port)
+    {
+        try
+        {
+            using var tcp = new TcpClient();
+            var connectTask = tcp.ConnectAsync(ip, port);
+            return await Task.WhenAny(connectTask, Task.Delay(2000)) == connectTask
+                   && connectTask.IsCompletedSuccessfully;
+        }
+        catch { return false; }
     }
 
     private static void OpenUrl(string url)
@@ -222,9 +277,52 @@ public sealed class LauncherForm : Form
         try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
     }
 
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    private void EnableDarkTitleBar()
+    {
+        // DWMWA_USE_IMMERSIVE_DARK_MODE = 20 (Windows 11+), fallback 19 (Windows 10 20H1+)
+        int value = 1;
+        if (DwmSetWindowAttribute(Handle, 20, ref value, sizeof(int)) != 0)
+            DwmSetWindowAttribute(Handle, 19, ref value, sizeof(int));
+    }
+
+    private static Icon BuildAppIcon()
+    {
+        try
+        {
+            using var stream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("app-icon.ico");
+            if (stream is not null)
+                return new Icon(stream);
+        }
+        catch { }
+        return SystemIcons.Application;
+    }
+
+    private void PushLogo()
+    {
+        try
+        {
+            using var stream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("app-icon-b64.txt");
+            if (stream is null) return;
+            using var reader = new StreamReader(stream);
+            var b64 = reader.ReadToEnd().Trim();
+            ExecuteScript($"document.getElementById('appLogo').src='data:image/png;base64,{b64}'");
+        }
+        catch { }
+    }
+
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _healthTimer.Dispose();
+        if (disposing)
+        {
+            _healthTimer.Dispose();
+            _updater.Dispose();
+            _webView.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

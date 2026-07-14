@@ -80,6 +80,14 @@ if (Test-Path $LauncherOut) {
     Get-ChildItem "$LauncherOut\HybridSlicer.*" | ForEach-Object {
         Copy-Item $_.FullName -Destination $ApiOut -Force
     }
+    Get-ChildItem "$LauncherOut\Microsoft.Web.WebView2.*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+        Copy-Item $_.FullName -Destination $ApiOut -Force
+    }
+    # Copy WebView2 native runtime
+    $wv2Runtime = "$LauncherOut\runtimes"
+    if (Test-Path $wv2Runtime) {
+        Copy-Item $wv2Runtime -Destination $ApiOut -Recurse -Force
+    }
     Write-Host "      OK -> $ApiOut\HybridSlicer.exe" -ForegroundColor Green
 } else {
     Write-Host "      WARNING: $LauncherOut not found" -ForegroundColor Yellow
@@ -132,27 +140,42 @@ Write-Host ""
 Write-Host "-- Installer (optional) ---" -ForegroundColor DarkGray
 
 if (Test-Path $Iscc) {
-    Write-Host "   Inno Setup found. Publishing self-contained build..." -ForegroundColor DarkGray
+    Write-Host "   Inno Setup found. Publishing self-contained builds..." -ForegroundColor DarkGray
 
+    $PublishX64 = "$PublishDir\x64"
+    $PublishX86 = "$PublishDir\x86"
+
+    # x64 build
+    Write-Host "   Publishing x64..." -ForegroundColor DarkGray
     dotnet publish "$Root\src\HybridSlicer.Api\HybridSlicer.Api.csproj" `
         -c Release -r win-x64 --self-contained true `
         -p:PublishSingleFile=false `
-        -o "$PublishDir" -v q
-    if ($LASTEXITCODE -ne 0) { Write-Host "   API publish failed." -ForegroundColor Yellow }
-    else {
-        dotnet publish "$Root\src\HybridSlicer.Launcher\HybridSlicer.Launcher.csproj" `
-            -c Release -r win-x64 --self-contained true `
-            -p:PublishSingleFile=false `
-            -o "$PublishDir" -v q
-        if ($LASTEXITCODE -ne 0) { Write-Host "   Launcher publish failed." -ForegroundColor Yellow }
-        else {
-            Write-Host "   Compiling installer..." -ForegroundColor DarkGray
-            & $Iscc "$Root\installer\HybridSlicer.iss"
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "   Installer -> dist\HybridSlicer-Setup.exe" -ForegroundColor Green
-            } else {
-                Write-Host "   Inno Setup compile failed." -ForegroundColor Yellow
-            }
+        -o "$PublishX64" -v q
+    if ($LASTEXITCODE -ne 0) { Write-Host "   API x64 publish failed." -ForegroundColor Yellow }
+    dotnet publish "$Root\src\HybridSlicer.Launcher\HybridSlicer.Launcher.csproj" `
+        -c Release -r win-x64 --self-contained true `
+        -p:PublishSingleFile=false `
+        -o "$PublishX64" -v q
+
+    # x86 build
+    Write-Host "   Publishing x86..." -ForegroundColor DarkGray
+    dotnet publish "$Root\src\HybridSlicer.Api\HybridSlicer.Api.csproj" `
+        -c Release -r win-x86 --self-contained true `
+        -p:PublishSingleFile=false `
+        -o "$PublishX86" -v q
+    if ($LASTEXITCODE -ne 0) { Write-Host "   API x86 publish failed." -ForegroundColor Yellow }
+    dotnet publish "$Root\src\HybridSlicer.Launcher\HybridSlicer.Launcher.csproj" `
+        -c Release -r win-x86 --self-contained true `
+        -p:PublishSingleFile=false `
+        -o "$PublishX86" -v q
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "   Compiling installer..." -ForegroundColor DarkGray
+        & $Iscc "$Root\installer\HybridSlicer.iss"
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "   Installer -> dist\HybridSlicer-Setup.exe" -ForegroundColor Green
+        } else {
+            Write-Host "   Inno Setup compile failed." -ForegroundColor Yellow
         }
     }
 } else {

@@ -48,3 +48,8 @@ cura_config.json
 .env.local
 appsettings.Production.json
 secrets.json
+update-token.txt
+
+# Build artifacts
+publish/
+screenshot*.png

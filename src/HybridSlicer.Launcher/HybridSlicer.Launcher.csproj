@@ -8,5 +8,18 @@
     <AssemblyName>HybridSlicer</AssemblyName>
     <RootNamespace>HybridSlicer.Launcher</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>app-icon.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="update-token.txt" Condition="Exists('update-token.txt')" LogicalName="update-token.txt" />
+    <EmbeddedResource Include="launcher.html" LogicalName="launcher.html" />
+    <EmbeddedResource Include="app-icon.ico" LogicalName="app-icon.ico" />
+    <EmbeddedResource Include="app-icon-b64.txt" LogicalName="app-icon-b64.txt" />
+  </ItemGroup>
 </Project>
