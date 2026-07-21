@@ -106,7 +106,7 @@ function makeMesh(
   return mesh
 }
 
-export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, className, travelX, travelY, travelZ, originX, originY, beds, originIsBedCenter }: Props) {
+export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, className, travelX, travelY, travelZ, beds }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mountRef     = useRef<HTMLDivElement>(null)
 
@@ -178,61 +178,65 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
     controlsRef.current = controls
 
     // ── Machine environment ────────────────────────────────────────────────
-    const bw = buildVolume.width, bd = buildVolume.depth
+    // Build the machine exactly as configured: travel envelope at origin,
+    // bed(s) positioned inside it, G-code part offset onto the bed.
+    const bw = buildVolume.width, bd = buildVolume.depth, bh = buildVolume.height || 250
     const hasMachineEnv = beds && beds.length > 0
-    const isCentered = originIsBedCenter === true
-    const ox = originX ?? 0, oy = originY ?? 0
-    const tx = travelX ?? bw, ty = travelY ?? bd, tz = travelZ ?? 350
+    const tx = travelX || bw, ty = travelY || bd, tz = travelZ || bh
+
+    // G-code has been translated from bed-center to machine coordinates by
+    // MachineCoordinateTranslator. So G-code (0,0) = machine origin.
+    // Build the machine environment in machine space — the G-code will naturally
+    // land on the bed at the correct position.
 
     // Always show axes helper
     const axesSize = Math.max(tx, ty, bw, bd) * 0.15
     scene.add(new THREE.AxesHelper(Math.max(axesSize, 30)))
 
     if (hasMachineEnv) {
-      // For center-origin mode, the G-code is centered at 0,0.
-      // Bed visualization must also center at 0,0.
-      // For non-center mode, beds are in machine-space offset by origin.
+      // Machine space: origin (0,0) at Three.js origin.
+      // G-code coordinates are already in machine space (translated by backend).
+      // Travel envelope centered in machine space.
+      const envGeo = new THREE.BoxGeometry(tx, tz, ty)
+      const envWire = new THREE.LineSegments(
+        new THREE.EdgesGeometry(envGeo),
+        new THREE.LineBasicMaterial({ color: 0x333355, transparent: true, opacity: 0.4 }),
+      )
+      // Three.js X = machine X, Three.js Z = machine Y
+      envWire.position.set(tx / 2, tz / 2, ty / 2)
+      scene.add(envWire)
 
-      if (!isCentered) {
-        // Travel envelope wireframe (machine-space)
-        const envGeo = new THREE.BoxGeometry(tx, tz, ty)
-        const envWire = new THREE.LineSegments(
-          new THREE.EdgesGeometry(envGeo),
-          new THREE.LineBasicMaterial({ color: 0x333355, transparent: true, opacity: 0.4 }),
-        )
-        envWire.position.set(-ox + tx / 2, tz / 2, -oy + ty / 2)
-        scene.add(envWire)
-      }
-
-      // Floor grid centered on bed area
-      const gridSize = isCentered ? Math.max(bw, bd) * 1.5 : Math.max(tx, ty)
+      // Floor grid
+      const gridSize = Math.max(tx, ty) * 1.2
       const grid = new THREE.GridHelper(gridSize, Math.round(gridSize / 20), 0x222244, 0x181828)
-      if (!isCentered) grid.position.set(-ox + tx / 2, 0, -oy + ty / 2)
+      grid.position.set(tx / 2, 0, ty / 2)
       scene.add(grid)
 
-      // Per-bed plates and corner markers
+      // Bed plates — positioned in machine space
       const bedColors = [0x3366cc, 0x33aa55, 0xcc5533, 0xaaaa33]
       const edgeColors = [0x5588ee, 0x55cc77, 0xee7755, 0xcccc55]
       for (const bed of beds) {
         const bc = bedColors[bed.index % bedColors.length]
         const ec = edgeColors[bed.index % edgeColors.length]
-        // In center-origin mode, first bed is at 0,0 (centered)
-        const bcx = isCentered ? 0 : bed.positionXMm + bed.widthMm / 2 - ox
-        const bcy = isCentered ? 0 : bed.positionYMm + bed.depthMm / 2 - oy
+        const bedW = bed.widthMm || bw
+        const bedD = bed.depthMm || bd
+        // Bed center in machine space (Three.js X = machine X, Three.js Z = machine Y)
+        const bcx = (bed.positionXMm || 0) + bedW / 2
+        const bcy = (bed.positionYMm || 0) + bedD / 2
 
-        const bGeo = new THREE.PlaneGeometry(bed.widthMm, bed.depthMm)
+        const bGeo = new THREE.PlaneGeometry(bedW, bedD)
         bGeo.rotateX(-Math.PI / 2)
         scene.add(new THREE.Mesh(bGeo, new THREE.MeshPhongMaterial({ color: bc, side: THREE.DoubleSide, transparent: true, opacity: 0.15 })).translateX(bcx).translateY(0.05).translateZ(bcy))
 
-        const outlineGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(bed.widthMm, bed.depthMm))
+        const outlineGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(bedW, bedD))
         const outline = new THREE.LineSegments(outlineGeo, new THREE.LineBasicMaterial({ color: ec }))
         outline.rotateX(-Math.PI / 2)
         outline.position.set(bcx, 0.1, bcy)
         scene.add(outline)
 
         // Corner marker
-        const cx = isCentered ? (-bed.widthMm / 2 + 2) : (bed.positionXMm - ox + 2)
-        const cz = isCentered ? (-bed.depthMm / 2 + 2) : (bed.positionYMm - oy + 2)
+        const cx = (bed.positionXMm || 0) + 2
+        const cz = (bed.positionYMm || 0) + 2
         const marker = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 8, 12), new THREE.MeshPhongMaterial({ color: ec }))
         marker.position.set(cx, 4, cz)
         scene.add(marker)
@@ -296,6 +300,7 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
 
     const modelMesh   = makeMesh(modelSortedRef.current,   cylGeo, MODEL_COLOR)
     const supportMesh = makeMesh(supportSortedRef.current, cylGeo, SUPPORT_COLOR)
+    // G-code is already in machine space — no offset needed
     scene.add(modelMesh)
     scene.add(supportMesh)
     modelMeshRef.current   = modelMesh
@@ -311,12 +316,11 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
     const center  = hasData ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3(0, 0, 0)
     const span    = hasData ? box.getSize(new THREE.Vector3()) : new THREE.Vector3(bw, buildVolume.height, bd)
 
-    // Position like Hybrid preview: slightly elevated, looking at part mid-height
-    const viewDist = Math.max(span.x, span.y, span.z, bw, bd) * 1.4
-    const partMidY = hasData ? (box.min.y + box.max.y) / 2 : 0
-    // For center-origin, the scene is at 0,0. For machine-space, offset by origin.
-    const machineCX = isCentered ? 0 : (hasMachineEnv ? (-ox + tx / 2) : center.x)
-    const machineCZ = isCentered ? 0 : (hasMachineEnv ? (-oy + ty / 2) : center.z)
+    // Camera looks at the part center (in machine space)
+    const viewDist = Math.max(span.x, span.y, span.z, bw, bd, tx, ty) * 1.4
+    const partMidY = hasData ? (box.min.y + box.max.y) / 2 : tz / 4
+    const machineCX = hasData ? center.x : tx / 2
+    const machineCZ = hasData ? center.z : ty / 2
     const targetPt = new THREE.Vector3(machineCX, partMidY, machineCZ)
 
     camera.position.set(machineCX - viewDist * 0.4, partMidY + viewDist * 0.5, machineCZ + viewDist * 0.8)
