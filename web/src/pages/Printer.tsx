@@ -30,9 +30,7 @@ export default function Printer() {
     try {
       const model = await duetApi.getModel()
       setModel(model)
-      if (model.heat?.heaters?.length) {
-        pushTempSample(model.heat.heaters)
-      }
+      pushTempSample(model)
     } catch {
       // poll failure is non-fatal
     }

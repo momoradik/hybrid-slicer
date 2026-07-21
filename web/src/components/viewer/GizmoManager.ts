@@ -129,22 +129,37 @@ export class GizmoManager {
     this.attachedGroup = group
     this.root.visible  = !!group
     this.drag = null
+    this.needsCenterUpdate = true
   }
 
   /** Call every frame before render. Positions and scales the gizmo. */
+  // Cached bounding box center — avoids scanning all vertices every frame
+  private cachedCenter = new THREE.Vector3()
+  private needsCenterUpdate = true
+
+  /** Call this when the attached model's geometry or transform changes */
+  invalidateCenter() { this.needsCenterUpdate = true }
+
   update() {
     if (!this.attachedGroup) return
 
-    this.attachedGroup.updateMatrixWorld(true)
-    const wb = new THREE.Box3().setFromObject(this.attachedGroup)
-    if (wb.isEmpty()) return
+    // Only recompute bounding box center when geometry/transform actually changed
+    // (NOT every frame — scanning 700K+ vertices 60x/sec was the performance killer)
+    if (this.needsCenterUpdate) {
+      this.needsCenterUpdate = false
+      this.attachedGroup.updateMatrixWorld(true)
+      // Use cached geometry BB + matrix transform — O(8) not O(2.1M vertices)
+      const mesh = this.attachedGroup.children[0] as THREE.Mesh
+      if (mesh?.geometry?.boundingBox) {
+        const wb = mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld)
+        wb.getCenter(this.cachedCenter)
+      }
+    }
 
-    const center = new THREE.Vector3()
-    wb.getCenter(center)
-    this.root.position.copy(center)
+    this.root.position.copy(this.cachedCenter)
 
     // Scale so gizmo appears a constant fraction of the viewport
-    const dist = this.camera.position.distanceTo(center)
+    const dist = this.camera.position.distanceTo(this.cachedCenter)
     this.root.scale.setScalar(Math.max(dist * 0.13, 1))
 
     // Gizmo is always world-axis-aligned

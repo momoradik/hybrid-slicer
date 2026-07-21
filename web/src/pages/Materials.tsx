@@ -71,7 +71,7 @@ export default function Materials() {
               <p className="text-xs text-gray-500 mt-0.5">
                 {m.type} · Filament Ø{m.diameterMm} mm ·
                 Print {m.printTempMinDegC}–{m.printTempMaxDegC}°C ·
-                Bed {m.bedTempMinDegC}–{m.bedTempMaxDegC}°C
+                {m.bedTempMinDegC > 0 || m.bedTempMaxDegC > 0 ? `Bed ${m.bedTempMinDegC}–${m.bedTempMaxDegC}°C` : 'No heated bed'}
               </p>
             </div>
             <div className="flex gap-2">
@@ -108,12 +108,35 @@ export default function Materials() {
               </MField>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <MField label="Bed Temp Min (°C)">
-                <NumInput value={form.bedTempMinDegC ?? 50} min={0} max={150} onChange={v => set('bedTempMinDegC', v)} />
+              <MField label="Heated Bed">
+                <div className="flex items-center gap-3 h-9">
+                  <button
+                    onClick={() => {
+                      const isOn = (form.bedTempMinDegC ?? 0) > 0 || (form.bedTempMaxDegC ?? 0) > 0
+                      if (isOn) { set('bedTempMinDegC', 0); set('bedTempMaxDegC', 0) }
+                      else { set('bedTempMinDegC', 50); set('bedTempMaxDegC', 70) }
+                    }}
+                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
+                      (form.bedTempMinDegC ?? 0) > 0 || (form.bedTempMaxDegC ?? 0) > 0 ? 'bg-primary' : 'bg-gray-600'
+                    }`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                      (form.bedTempMinDegC ?? 0) > 0 || (form.bedTempMaxDegC ?? 0) > 0 ? 'translate-x-5' : ''
+                    }`} />
+                  </button>
+                  <span className="text-sm text-gray-400">{(form.bedTempMinDegC ?? 0) > 0 || (form.bedTempMaxDegC ?? 0) > 0 ? 'Enabled' : 'Disabled'}</span>
+                </div>
               </MField>
-              <MField label="Bed Temp Max (°C)">
-                <NumInput value={form.bedTempMaxDegC ?? 70} min={0} max={150} onChange={v => set('bedTempMaxDegC', v)} />
-              </MField>
+              {((form.bedTempMinDegC ?? 0) > 0 || (form.bedTempMaxDegC ?? 0) > 0) && (
+                <>
+                  <MField label="Bed Temp Min (°C)">
+                    <NumInput value={form.bedTempMinDegC ?? 50} min={1} max={150} onChange={v => set('bedTempMinDegC', v)} />
+                  </MField>
+                  <MField label="Bed Temp Max (°C)">
+                    <NumInput value={form.bedTempMaxDegC ?? 70} min={1} max={150} onChange={v => set('bedTempMaxDegC', v)} />
+                  </MField>
+                </>
+              )}
               <MField label="Filament Diameter (mm)">
                 <NumInput value={form.diameterMm ?? 1.75} min={0.5} max={5} step={0.05} onChange={v => set('diameterMm', v)} />
               </MField>

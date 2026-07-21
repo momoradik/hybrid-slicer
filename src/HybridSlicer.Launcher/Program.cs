@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -10,9 +11,33 @@ namespace HybridSlicer.Launcher;
 
 static class Program
 {
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    private const string MutexName = "Global\\HybridSlicer_SingleInstance_B8F3A2E1";
+
     [STAThread]
     static void Main()
     {
+        using var mutex = new Mutex(true, MutexName, out bool createdNew);
+        if (!createdNew)
+        {
+            // Another instance is already running — bring it to front
+            var existing = Process.GetProcessesByName("HybridSlicer")
+                .FirstOrDefault(p => p.Id != Environment.ProcessId && p.MainWindowHandle != IntPtr.Zero);
+            if (existing is not null)
+            {
+                var hwnd = existing.MainWindowHandle;
+                if (IsIconic(hwnd)) ShowWindow(hwnd, 9); // SW_RESTORE
+                SetForegroundWindow(hwnd);
+            }
+            return;
+        }
+
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);

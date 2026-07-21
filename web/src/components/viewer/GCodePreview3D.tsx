@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { BuildVolume } from './StlViewer'
 
-interface BedInfo {
+export interface BedInfo {
   index: number
   widthMm: number
   depthMm: number
@@ -22,9 +22,10 @@ interface Props {
   originX?: number
   originY?: number
   beds?: BedInfo[]
+  originIsBedCenter?: boolean
 }
 
-const MODEL_COLOR   = 0x1e40af
+const MODEL_COLOR   = 0x2277dd
 const SUPPORT_COLOR = 0xf97316
 const BEAD_SEGS     = 6
 
@@ -105,7 +106,7 @@ function makeMesh(
   return mesh
 }
 
-export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, className, travelX, travelY, travelZ, originX, originY, beds }: Props) {
+export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, className, travelX, travelY, travelZ, originX, originY, beds, originIsBedCenter }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mountRef     = useRef<HTMLDivElement>(null)
 
@@ -151,45 +152,62 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(w, h)
-    renderer.setClearColor(0x0d1117)
+    renderer.setClearColor(0x0d0d14)
     el.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
     const scene = new THREE.Scene()
-    scene.add(new THREE.AmbientLight(0xffffff, 0.5))
-    const sun = new THREE.DirectionalLight(0xffffff, 1.0)
-    sun.position.set(1, 2, 1.5)
+    // Match Hybrid preview lighting
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6))
+    const sun = new THREE.DirectionalLight(0xffffff, 1.4)
+    sun.position.set(150, 200, 100)
     scene.add(sun)
+    const fill = new THREE.DirectionalLight(0x8888ff, 0.4)
+    fill.position.set(-100, -50, -100)
+    scene.add(fill)
     sceneRef.current = scene
 
-    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 20000)
+    const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 20000)
     cameraRef.current = camera
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
-    controls.dampingFactor = 0.1
+    controls.dampingFactor = 0.08
+    controls.minDistance = 5
+    controls.maxDistance = 5000
     controlsRef.current = controls
 
     // ── Machine environment ────────────────────────────────────────────────
     const bw = buildVolume.width, bd = buildVolume.depth
     const hasMachineEnv = beds && beds.length > 0
+    const isCentered = originIsBedCenter === true
     const ox = originX ?? 0, oy = originY ?? 0
     const tx = travelX ?? bw, ty = travelY ?? bd, tz = travelZ ?? 350
 
-    if (hasMachineEnv) {
-      // Travel envelope wireframe
-      const envGeo = new THREE.BoxGeometry(tx, tz, ty)
-      const envWire = new THREE.LineSegments(
-        new THREE.EdgesGeometry(envGeo),
-        new THREE.LineBasicMaterial({ color: 0x333355, transparent: true, opacity: 0.4 }),
-      )
-      envWire.position.set(-ox + tx / 2, tz / 2, -oy + ty / 2)
-      scene.add(envWire)
+    // Always show axes helper
+    const axesSize = Math.max(tx, ty, bw, bd) * 0.15
+    scene.add(new THREE.AxesHelper(Math.max(axesSize, 30)))
 
-      // Floor grid
-      const gridSize = Math.max(tx, ty)
-      const grid = new THREE.GridHelper(gridSize, Math.round(gridSize / 20), 0x222233, 0x1a1a2e)
-      grid.position.set(-ox + tx / 2, 0, -oy + ty / 2)
+    if (hasMachineEnv) {
+      // For center-origin mode, the G-code is centered at 0,0.
+      // Bed visualization must also center at 0,0.
+      // For non-center mode, beds are in machine-space offset by origin.
+
+      if (!isCentered) {
+        // Travel envelope wireframe (machine-space)
+        const envGeo = new THREE.BoxGeometry(tx, tz, ty)
+        const envWire = new THREE.LineSegments(
+          new THREE.EdgesGeometry(envGeo),
+          new THREE.LineBasicMaterial({ color: 0x333355, transparent: true, opacity: 0.4 }),
+        )
+        envWire.position.set(-ox + tx / 2, tz / 2, -oy + ty / 2)
+        scene.add(envWire)
+      }
+
+      // Floor grid centered on bed area
+      const gridSize = isCentered ? Math.max(bw, bd) * 1.5 : Math.max(tx, ty)
+      const grid = new THREE.GridHelper(gridSize, Math.round(gridSize / 20), 0x222244, 0x181828)
+      if (!isCentered) grid.position.set(-ox + tx / 2, 0, -oy + ty / 2)
       scene.add(grid)
 
       // Per-bed plates and corner markers
@@ -198,8 +216,9 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
       for (const bed of beds) {
         const bc = bedColors[bed.index % bedColors.length]
         const ec = edgeColors[bed.index % edgeColors.length]
-        const bcx = bed.positionXMm + bed.widthMm / 2 - ox
-        const bcy = bed.positionYMm + bed.depthMm / 2 - oy
+        // In center-origin mode, first bed is at 0,0 (centered)
+        const bcx = isCentered ? 0 : bed.positionXMm + bed.widthMm / 2 - ox
+        const bcy = isCentered ? 0 : bed.positionYMm + bed.depthMm / 2 - oy
 
         const bGeo = new THREE.PlaneGeometry(bed.widthMm, bed.depthMm)
         bGeo.rotateX(-Math.PI / 2)
@@ -212,7 +231,8 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
         scene.add(outline)
 
         // Corner marker
-        const cx = bed.positionXMm - ox + 2, cz = bed.positionYMm - oy + 2
+        const cx = isCentered ? (-bed.widthMm / 2 + 2) : (bed.positionXMm - ox + 2)
+        const cz = isCentered ? (-bed.depthMm / 2 + 2) : (bed.positionYMm - oy + 2)
         const marker = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 8, 12), new THREE.MeshPhongMaterial({ color: ec }))
         marker.position.set(cx, 4, cz)
         scene.add(marker)
@@ -230,15 +250,36 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
         scene.add(sprite)
       }
     } else {
-      // Simple bed outline (single bed, no machine info)
-      const hw = bw / 2, hd = bd / 2
-      const bedPts = [
-        new THREE.Vector3(-hw,0,-hd), new THREE.Vector3(hw,0,-hd),
-        new THREE.Vector3(hw,0,-hd),  new THREE.Vector3(hw,0,hd),
-        new THREE.Vector3(hw,0,hd),   new THREE.Vector3(-hw,0,hd),
-        new THREE.Vector3(-hw,0,hd),  new THREE.Vector3(-hw,0,-hd),
-      ]
-      scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(bedPts), new THREE.LineBasicMaterial({ color: 0x334155 })))
+      // Single bed with grid — same visual quality as multi-bed
+      const gridSize = Math.max(bw, bd) * 1.5
+      const grid = new THREE.GridHelper(gridSize, Math.round(gridSize / 20), 0x222244, 0x181828)
+      scene.add(grid)
+
+      // Bed plate
+      const bedGeo = new THREE.PlaneGeometry(bw, bd)
+      bedGeo.rotateX(-Math.PI / 2)
+      const bedMesh = new THREE.Mesh(bedGeo, new THREE.MeshPhongMaterial({
+        color: 0x3366cc, side: THREE.DoubleSide, transparent: true, opacity: 0.15,
+      }))
+      bedMesh.position.y = 0.05
+      scene.add(bedMesh)
+
+      // Bed outline
+      const outlineGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(bw, bd))
+      const outline = new THREE.LineSegments(outlineGeo, new THREE.LineBasicMaterial({ color: 0x5588ee }))
+      outline.rotateX(-Math.PI / 2)
+      outline.position.y = 0.1
+      scene.add(outline)
+
+      // Travel envelope
+      const envH = buildVolume.height || 350
+      const envGeo = new THREE.BoxGeometry(bw, envH, bd)
+      const envWire = new THREE.LineSegments(
+        new THREE.EdgesGeometry(envGeo),
+        new THREE.LineBasicMaterial({ color: 0x333355, transparent: true, opacity: 0.3 }),
+      )
+      envWire.position.y = envH / 2
+      scene.add(envWire)
     }
 
     // ── Build meshes for ALL segments ─────────────────────────────────────
@@ -260,7 +301,7 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
     modelMeshRef.current   = modelMesh
     supportMeshRef.current = supportMesh
 
-    // ── Frame camera on full model ─────────────────────────────────────────
+    // ── Frame camera — match Hybrid preview perspective ────────────────────
     const box = new THREE.Box3()
     for (const s of parsed.segments) {
       box.expandByPoint(new THREE.Vector3(s.x0, s.y0, s.z0))
@@ -269,10 +310,18 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
     const hasData = parsed.segments.length > 0
     const center  = hasData ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3(0, 0, 0)
     const span    = hasData ? box.getSize(new THREE.Vector3()) : new THREE.Vector3(bw, buildVolume.height, bd)
-    const d = Math.max(span.x, span.y, span.z, bw, bd) * 1.5
-    camera.position.set(center.x - d * 0.4, center.y + d * 0.8, center.z + d)
-    camera.lookAt(center)
-    controls.target.copy(center)
+
+    // Position like Hybrid preview: slightly elevated, looking at part mid-height
+    const viewDist = Math.max(span.x, span.y, span.z, bw, bd) * 1.4
+    const partMidY = hasData ? (box.min.y + box.max.y) / 2 : 0
+    // For center-origin, the scene is at 0,0. For machine-space, offset by origin.
+    const machineCX = isCentered ? 0 : (hasMachineEnv ? (-ox + tx / 2) : center.x)
+    const machineCZ = isCentered ? 0 : (hasMachineEnv ? (-oy + ty / 2) : center.z)
+    const targetPt = new THREE.Vector3(machineCX, partMidY, machineCZ)
+
+    camera.position.set(machineCX - viewDist * 0.4, partMidY + viewDist * 0.5, machineCZ + viewDist * 0.8)
+    camera.lookAt(targetPt)
+    controls.target.copy(targetPt)
     controls.update()
 
     // ── Render loop ────────────────────────────────────────────────────────

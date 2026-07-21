@@ -12,7 +12,7 @@ import StlViewer, {
   type StlViewerHandle,
   DEFAULT_TRANSFORM,
 } from '../components/viewer/StlViewer'
-import GCodePreview3D from '../components/viewer/GCodePreview3D'
+import GCodePreview3D, { type BedInfo } from '../components/viewer/GCodePreview3D'
 import { jobsApi, machineProfilesApi, printProfilesApi, materialsApi, toolsApi } from '../api/client'
 import { useMachineConnection } from '../hooks/useMachineConnection'
 import { useAppStore } from '../store'
@@ -358,17 +358,31 @@ export default function StlImport() {
   // Track time of last undo push per model (to batch drag transforms)
   const lastUndoPushTimeRef = useRef<Record<string, number>>({})
 
+  // Throttle React state updates during drag — the 3D viewer handles its own
+  // rendering internally. We only sync React state every 200ms to avoid
+  // re-rendering the entire 1700-line component on every mouse move frame.
+  const pendingTransformRef = useRef<{ id: string; t: ModelTransform } | null>(null)
+  const transformTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const updateTransform = useCallback((id: string, t: ModelTransform) => {
-    const now = Date.now()
-    const last = lastUndoPushTimeRef.current[id] ?? 0
-    setModels(prev => {
-      if (now - last > 400) {
-        const old = prev.find(m => m.id === id)
-        if (old) pushUndo(id, old.transform)
-        lastUndoPushTimeRef.current[id] = now
-      }
-      return prev.map(m => m.id === id ? { ...m, transform: t } : m)
-    })
+    pendingTransformRef.current = { id, t }
+    if (transformTimerRef.current) return // already scheduled
+    transformTimerRef.current = setTimeout(() => {
+      transformTimerRef.current = null
+      const pending = pendingTransformRef.current
+      if (!pending) return
+      pendingTransformRef.current = null
+      const now = Date.now()
+      const last = lastUndoPushTimeRef.current[pending.id] ?? 0
+      setModels(prev => {
+        if (now - last > 400) {
+          const old = prev.find(m => m.id === pending.id)
+          if (old) pushUndo(pending.id, old.transform)
+          lastUndoPushTimeRef.current[pending.id] = now
+        }
+        return prev.map(m => m.id === pending.id ? { ...m, transform: pending.t } : m)
+      })
+    }, 200)
   }, [])
 
   const patchSelected = (patch: Partial<ModelTransform>) => {
@@ -394,12 +408,28 @@ export default function StlImport() {
     setModels(prev => prev.map(m => m.id === id ? { ...m, size } : m))
   }, [])
 
+  const pendingSizeRef = useRef<{ id: string; size: { x: number; y: number; z: number } } | null>(null)
+  const sizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleSizeChange = useCallback((id: string, size: { x: number; y: number; z: number }) => {
-    setModels(prev => prev.map(m => m.id === id ? { ...m, size } : m))
+    pendingSizeRef.current = { id, size }
+    if (sizeTimerRef.current) return
+    sizeTimerRef.current = setTimeout(() => {
+      sizeTimerRef.current = null
+      const p = pendingSizeRef.current
+      if (p) { pendingSizeRef.current = null; setModels(prev => prev.map(m => m.id === p.id ? { ...m, size: p.size } : m)) }
+    }, 200)
   }, [])
 
+  const pendingBoundsRef = useRef<{ id: string; out: boolean } | null>(null)
+  const boundsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleBoundsChange = useCallback((id: string, out: boolean) => {
-    setModels(prev => prev.map(m => m.id === id ? { ...m, isOutOfBounds: out } : m))
+    pendingBoundsRef.current = { id, out }
+    if (boundsTimerRef.current) return
+    boundsTimerRef.current = setTimeout(() => {
+      boundsTimerRef.current = null
+      const p = pendingBoundsRef.current
+      if (p) { pendingBoundsRef.current = null; setModels(prev => prev.map(m => m.id === p.id ? { ...m, isOutOfBounds: p.out } : m)) }
+    }, 200)
   }, [])
 
   // ── Drop / input ───────────────────────────────────────────────────────────
@@ -706,8 +736,12 @@ export default function StlImport() {
             ? <GCodePreview jobId={generatedJobId} buildVolume={buildVolume} lineWidth={selectedProfile?.nozzleDiameterMm || 0.4}
                 travelX={selectedMachine?.travelXMm} travelY={selectedMachine?.travelYMm} travelZ={selectedMachine?.bedHeightMm}
                 originX={selectedMachine?.originXMm} originY={selectedMachine?.originYMm}
-                beds={selectedMachineBeds.length > 1 ? selectedMachineBeds : undefined} />
-            : <GCodePreviewInline gcode={previewGCode!} buildVolume={buildVolume} lineWidth={selectedProfile?.nozzleDiameterMm || 0.4} />
+                beds={selectedMachineBeds} originIsBedCenter />
+            : <GCodePreviewInline gcode={previewGCode!} buildVolume={buildVolume} lineWidth={selectedProfile?.nozzleDiameterMm || 0.4}
+                travelX={selectedMachine?.travelXMm} travelY={selectedMachine?.travelYMm} travelZ={selectedMachine?.bedHeightMm}
+                originX={selectedMachine?.originXMm} originY={selectedMachine?.originYMm}
+                beds={selectedMachineBeds}
+                originIsBedCenter />
           }
         </div>
       ) : (
@@ -1653,10 +1687,17 @@ function GCodeLayerViewer({ gcode }: { gcode: string }) {
 
 // ── Inline G-code preview (uses already-fetched gcode string) ────────────────
 
-function GCodePreviewInline({ gcode, buildVolume, lineWidth = 0.4 }: {
+function GCodePreviewInline({ gcode, buildVolume, lineWidth = 0.4, travelX, travelY, travelZ, originX, originY, beds, originIsBedCenter }: {
   gcode: string
   buildVolume: BuildVolume
   lineWidth?: number
+  travelX?: number
+  travelY?: number
+  travelZ?: number
+  originX?: number
+  originY?: number
+  beds?: BedInfo[]
+  originIsBedCenter?: boolean
 }) {
   const [view, setView] = useState<'3d' | 'layers'>('3d')
   return (
@@ -1674,7 +1715,9 @@ function GCodePreviewInline({ gcode, buildVolume, lineWidth = 0.4 }: {
         >G-code Layers</button>
       </div>
       {view === '3d'
-        ? <GCodePreview3D gcode={gcode} buildVolume={buildVolume} lineWidth={lineWidth} className="flex-1 min-h-0" />
+        ? <GCodePreview3D gcode={gcode} buildVolume={buildVolume} lineWidth={lineWidth} className="flex-1 min-h-0"
+            travelX={travelX} travelY={travelY} travelZ={travelZ} originX={originX} originY={originY}
+            beds={beds} originIsBedCenter={originIsBedCenter} />
         : <GCodeLayerViewer gcode={gcode} />
       }
     </div>
@@ -1683,13 +1726,14 @@ function GCodePreviewInline({ gcode, buildVolume, lineWidth = 0.4 }: {
 
 // ── G-code preview component (3D + layer text) ────────────────────────────────
 
-function GCodePreview({ jobId, buildVolume, lineWidth = 0.4, travelX, travelY, travelZ, originX, originY, beds }: {
+function GCodePreview({ jobId, buildVolume, lineWidth = 0.4, travelX, travelY, travelZ, originX, originY, beds, originIsBedCenter }: {
   jobId: string
   buildVolume: BuildVolume
   lineWidth?: number
   travelX?: number; travelY?: number; travelZ?: number
   originX?: number; originY?: number
   beds?: { index: number; widthMm: number; depthMm: number; positionXMm: number; positionYMm: number }[]
+  originIsBedCenter?: boolean
 }) {
   const [view, setView] = useState<'3d' | 'layers'>('3d')
 
@@ -1738,7 +1782,7 @@ function GCodePreview({ jobId, buildVolume, lineWidth = 0.4, travelX, travelY, t
       </div>
       {view === '3d'
         ? <GCodePreview3D gcode={gcode} buildVolume={buildVolume} lineWidth={lineWidth} className="flex-1 min-h-0"
-            travelX={travelX} travelY={travelY} travelZ={travelZ} originX={originX} originY={originY} beds={beds} />
+            travelX={travelX} travelY={travelY} travelZ={travelZ} originX={originX} originY={originY} beds={beds} originIsBedCenter={originIsBedCenter} />
         : <GCodeLayerViewer gcode={gcode} />
       }
     </div>

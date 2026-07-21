@@ -86,8 +86,17 @@ function extractTransform(group: THREE.Group, _prev: ModelTransform): ModelTrans
   }
 }
 
+/** Fast world-AABB from cached geometry BB + matrix — O(8) not O(2.1M vertices) */
+function fastWorldBB(group: THREE.Group): THREE.Box3 {
+  const mesh = group.children[0] as THREE.Mesh
+  if (!mesh?.geometry?.boundingBox) return new THREE.Box3()
+  group.updateMatrixWorld()
+  return mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld)
+}
+
 function modelIsOOB(group: THREE.Group, bv: BuildVolume): boolean {
-  const wb = new THREE.Box3().setFromObject(group, true)
+  const wb = fastWorldBB(group)
+  if (wb.isEmpty()) return false
   return (
     wb.min.x < -bv.width / 2 || wb.max.x > bv.width / 2 ||
     wb.min.z < -bv.depth / 2 || wb.max.z > bv.depth / 2 ||
@@ -100,6 +109,7 @@ function modelIsOOB(group: THREE.Group, bv: BuildVolume): boolean {
 interface MeshData {
   group: THREE.Group
   mesh: THREE.Mesh
+  proxyMesh: THREE.Mesh        // cheap invisible box for raycasting (12 tris vs 700K)
   url: string
   naturalSize: THREE.Vector3   // un-scaled, in Three.js units
   currentTransform: ModelTransform
@@ -196,9 +206,9 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
   }, [paintMesh])
 
   const checkAllBounds = useCallback(() => {
-    for (const [id, data] of meshMapRef.current) {
-      data.group.updateMatrixWorld(true)
-      onBoundsChangeRef.current?.(id, modelIsOOB(data.group, buildVolumeRef.current))
+    for (const [id] of meshMapRef.current) {
+      const d = meshMapRef.current.get(id)
+      if (d) onBoundsChangeRef.current?.(id, modelIsOOB(d.group, buildVolumeRef.current))
     }
     paintAll()
   }, [paintAll])
@@ -246,7 +256,7 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
 
       // Snap lowest point to bed (Y = 0) — use precise=true to get exact vertex-level AABB
       data.group.updateMatrixWorld(true)
-      const wb = new THREE.Box3().setFromObject(data.group, true)
+      const wb = fastWorldBB(data.group)
       data.group.position.y -= wb.min.y
 
       data.currentTransform = extractTransform(data.group, data.currentTransform)
@@ -286,7 +296,7 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
       const data = meshMapRef.current.get(id)
       if (!data) return
       data.group.updateMatrixWorld(true)
-      const wb = new THREE.Box3().setFromObject(data.group, true)
+      const wb = fastWorldBB(data.group)
       data.group.position.y -= wb.min.y
       if (data.group.position.y < 0) data.group.position.y = 0
       data.currentTransform.z = data.group.position.y
@@ -302,7 +312,7 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
       const fps: { id: string; w: number; d: number }[] = []
       for (const [id, data] of meshMapRef.current) {
         data.group.updateMatrixWorld(true)
-        const wb = new THREE.Box3().setFromObject(data.group)
+        const wb = fastWorldBB(data.group)
         fps.push({ id, w: wb.max.x - wb.min.x, d: wb.max.z - wb.min.z })
       }
       fps.sort((a, b) => b.w * b.d - a.w * a.d)
@@ -322,7 +332,7 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
         data.group.position.x = curX + w / 2
         data.group.position.z = curZ + d / 2
         data.group.updateMatrixWorld(true)
-        const wb = new THREE.Box3().setFromObject(data.group)
+        const wb = fastWorldBB(data.group)
         data.group.position.y -= wb.min.y
         if (data.group.position.y < 0) data.group.position.y = 0
         data.currentTransform = extractTransform(data.group, data.currentTransform)
@@ -349,24 +359,24 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
     camera.position.set(200, 150, 200)
     cameraRef.current = camera
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' })
     renderer.setSize(mount.clientWidth, mount.clientHeight)
-    renderer.setPixelRatio(window.devicePixelRatio)
-    renderer.shadowMap.enabled = true
+    renderer.setPixelRatio(1)
     mount.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55))
-    const sun = new THREE.DirectionalLight(0xffffff, 1.0)
+    // Log GPU info for debugging
+    const glCtx = renderer.getContext()
+    const dbg = glCtx.getExtension('WEBGL_debug_renderer_info')
+    if (dbg) console.log('[STL Viewer GPU]', glCtx.getParameter(dbg.UNMASKED_RENDERER_WEBGL))
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7))
+    const sun = new THREE.DirectionalLight(0xffffff, 0.8)
     sun.position.set(1, 2, 3)
     scene.add(sun)
-    const fill = new THREE.DirectionalLight(0xffffff, 0.3)
-    fill.position.set(-1, -0.5, -1)
-    scene.add(fill)
 
     const controls = new OrbitControls(camera, renderer.domElement)
-    controls.enableDamping = true
-    controls.dampingFactor = 0.08
+    controls.enableDamping = false
     controls.mouseButtons = {
       LEFT: THREE.MOUSE.ROTATE,
       MIDDLE: THREE.MOUSE.DOLLY,
@@ -374,7 +384,7 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
     }
     controlsRef.current = controls
 
-    scene.add(new THREE.GridHelper(800, 80, 0x374151, 0x1f2937))
+    scene.add(new THREE.GridHelper(800, 40, 0x374151, 0x1f2937))
 
     // ── Gizmo ──────────────────────────────────────────────────────────────
     const gizmo = new GizmoManager(scene, camera)
@@ -400,7 +410,7 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
       if (!data) return
       data.group.updateMatrixWorld(true)
       data.currentTransform = extractTransform(data.group, data.currentTransform)
-      const wb = new THREE.Box3().setFromObject(data.group)
+      const wb = fastWorldBB(data.group)
       const ws = wb.getSize(new THREE.Vector3())
       onSizeChangeRef.current?.(id, { x: ws.x, y: ws.z, z: ws.y })
       onBoundsChangeRef.current?.(id, modelIsOOB(data.group, buildVolumeRef.current))
@@ -429,26 +439,26 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
         return
       }
 
-      // ── 2. Check model meshes ─────────────────────────────────────────────
-      const allMeshes: THREE.Mesh[] = []
-      for (const d of meshMapRef.current.values()) allMeshes.push(d.mesh)
+      // ── 2. Check model meshes (via cheap proxy boxes) ─────────────────────
+      const allProxies: THREE.Mesh[] = []
+      for (const d of meshMapRef.current.values()) allProxies.push(d.proxyMesh)
 
-      if (allMeshes.length === 0) {
+      if (allProxies.length === 0) {
         emptyClickPxRef.current = { x: e.clientX, y: e.clientY }
         return
       }
 
-      const hits = raycaster.intersectObjects(allMeshes, false)
+      const hits = raycaster.intersectObjects(allProxies, false)
       if (hits.length === 0) {
         // Clicked on empty area — track for potential deselect
         emptyClickPxRef.current = { x: e.clientX, y: e.clientY }
         return
       }
 
-      const hitMesh = hits[0].object as THREE.Mesh
+      const hitProxy = hits[0].object as THREE.Mesh
       let hitId: string | null = null
       for (const [id, d] of meshMapRef.current) {
-        if (d.mesh === hitMesh) { hitId = id; break }
+        if (d.proxyMesh === hitProxy) { hitId = id; break }
       }
       if (!hitId) return
 
@@ -500,19 +510,16 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
           const data = meshMapRef.current.get(selId)
           if (data) {
             data.group.updateMatrixWorld(true)
-            // Re-seat on bed after rotation
             if (result.rotationChanged) {
-              const wb = new THREE.Box3().setFromObject(data.group, true)
-              if (wb.min.y < 0) data.group.position.y -= wb.min.y
+              const wb = fastWorldBB(data.group)
+              if (!wb.isEmpty() && wb.min.y < 0) data.group.position.y -= wb.min.y
             }
+            gizmo.invalidateCenter()
             data.currentTransform = extractTransform(data.group, data.currentTransform)
-            onBoundsChangeRef.current?.(selId, modelIsOOB(data.group, buildVolumeRef.current))
             const now = Date.now()
             if (now - lastCbMs >= 40) {
               lastCbMs = now
-              const wb = new THREE.Box3().setFromObject(data.group)
-              const ws = wb.getSize(new THREE.Vector3())
-              onSizeChangeRef.current?.(selId, { x: ws.x, y: ws.z, z: ws.y })
+              onBoundsChangeRef.current?.(selId, modelIsOOB(data.group, buildVolumeRef.current))
               onTransformChangeRef.current?.(selId, { ...data.currentTransform })
             }
             paintMesh(selId)
@@ -532,9 +539,7 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
       data.group.position.z = target.z + dragOffsetRef.current.z
       data.currentTransform.x = data.group.position.x
       data.currentTransform.y = data.group.position.z
-
-      data.group.updateMatrixWorld(true)
-      onBoundsChangeRef.current?.(id, modelIsOOB(data.group, buildVolumeRef.current))
+      gizmo.invalidateCenter()
 
       const now = Date.now()
       if (now - lastCbMs >= 40) {
@@ -586,7 +591,7 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
 
             if (data.arrowHelper && sceneRef.current) sceneRef.current.remove(data.arrowHelper)
             const worldNorm = face.normal.clone().transformDirection(data.mesh.matrixWorld).normalize()
-            const sz = new THREE.Box3().setFromObject(data.group).getSize(new THREE.Vector3())
+            const sz = fastWorldBB(data.group).getSize(new THREE.Vector3())
             const arrowLen = Math.max(10, sz.length() * 0.2)
             const arrow = new THREE.ArrowHelper(worldNorm, hits[0].point, arrowLen, 0xf97316, arrowLen * 0.3, arrowLen * 0.15)
             if (sceneRef.current) sceneRef.current.add(arrow)
@@ -625,21 +630,14 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
 
-    // Render loop
+    // Simple render loop
     const animate = () => {
       animIdRef.current = requestAnimationFrame(animate)
-      controls.update()
-      if (boxHelperRef.current) {
-        const selId = selectedIdRef.current
-        if (selId) {
-          const d = meshMapRef.current.get(selId)
-          if (d) boxHelperRef.current.box.setFromObject(d.group, true)
-        }
-      }
-      gizmo.update()   // reposition + rescale gizmo every frame
+      gizmo.update()
       renderer.render(scene, camera)
     }
     animate()
+    ;(renderer as any).__requestRender = () => {}
 
     // Resize observer
     const ro = new ResizeObserver(() => {
@@ -759,26 +757,40 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
             const liveModel = modelsRef.current.find(m => m.id === model.id)
             if (!liveModel) { geometry.dispose(); return }
 
-            geometry.computeVertexNormals()
+            // STL files include face normals — use them directly (skip expensive computeVertexNormals)
+            if (!geometry.attributes.normal) geometry.computeVertexNormals()
             geometry.center()
             geometry.computeBoundingBox()
             const bb   = geometry.boundingBox!
             const size = new THREE.Vector3()
             bb.getSize(size)
-            geometry.translate(0, size.y / 2, 0) // base at Y=0
-            geometry.computeBoundingBox()         // refresh BB after translate so setFromObject is correct
+            geometry.translate(0, size.y / 2, 0)
+            geometry.computeBoundingBox()
 
             const mesh = new THREE.Mesh(
               geometry,
-              new THREE.MeshPhongMaterial({ color: C_NORMAL, specular: 0x222222, shininess: 40 }),
+              new THREE.MeshLambertMaterial({ color: C_NORMAL }),
             )
+            mesh.frustumCulled = true
+
+            // Cheap invisible box proxy for raycasting (12 tris vs 700K)
+            const bbCenter = new THREE.Vector3()
+            geometry.boundingBox!.getCenter(bbCenter)
+            const proxyGeo = new THREE.BoxGeometry(size.x, size.y, size.z)
+            const proxyMesh = new THREE.Mesh(
+              proxyGeo,
+              new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide }),
+            )
+            proxyMesh.position.copy(bbCenter)
+
             const group = new THREE.Group()
             group.add(mesh)
+            group.add(proxyMesh)
             applyTransform(group, liveModel.transform)
             sceneRef.current!.add(group)
 
             const data: MeshData = {
-              group, mesh, url: liveModel.url,
+              group, mesh, proxyMesh, url: liveModel.url,
               naturalSize: size.clone(),
               currentTransform: { ...liveModel.transform },
               faceNormal: null, faceHitPoint: null, arrowHelper: null,
@@ -820,13 +832,16 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
         applyTransform(existing.group, model.transform)
         existing.currentTransform = { ...model.transform }
         existing.group.updateMatrixWorld(true)
-        const wb = new THREE.Box3().setFromObject(existing.group)
+        const wb = fastWorldBB(existing.group)
         const ws = wb.getSize(new THREE.Vector3())
         onSizeChangeRef.current?.(model.id, { x: ws.x, y: ws.z, z: ws.y })
         paintMesh(model.id)
         checkAllBounds()
       }
     }
+    // Trigger render after model sync
+    const rr = rendererRef.current as any
+    if (rr?.__requestRender) rr.__requestRender()
   }, [models, sceneReady, paintMesh, checkAllBounds])
 
   // ── Selected model BoxHelper ──────────────────────────────────────────────
@@ -845,7 +860,7 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
       if (data) {
         // Gizmo is NOT auto-attached on selection — use double-click to show gizmo
         if (data.mesh.geometry.attributes.position) {
-          const box = new THREE.Box3().setFromObject(data.group, true)
+          const box = fastWorldBB(data.group)
           const helper = new THREE.Box3Helper(box, 0xfbbf24)
           scene.add(helper)
           boxHelperRef.current = { helper, box }

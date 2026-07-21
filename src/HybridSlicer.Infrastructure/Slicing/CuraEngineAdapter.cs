@@ -244,14 +244,48 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         sb.Append($" -s wall_line_count={p.WallCount}");
         sb.Append($" -s top_layers={p.TopBottomLayers}");
         sb.Append($" -s bottom_layers={p.TopBottomLayers}");
+
+        // Speeds — CuraEngine 5.x resolves these from extruder context
+        sb.Append($" -s speed_print={p.PrintSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_travel={p.TravelSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_infill={p.InfillSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_wall_0={p.WallSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_wall_x={p.InnerWallSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_layer_0={p.FirstLayerSpeedMmS.ToString("F1", ic)}");
+
+        // Infill
         sb.Append($" -s infill_sparse_density={p.InfillDensityPct.ToString("F4", ic)}");
         sb.Append($" -s infill_line_distance={infillLineDist.ToString("F4", ic)}");
         sb.Append($" -s infill_pattern={p.InfillPattern}");
+
+        // Material
         sb.Append($" -s material_diameter={p.FilamentDiameterMm.ToString("F2", ic)}");
         sb.Append($" -s material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
         sb.Append($" -s machine_nozzle_size={p.NozzleDiameterMm.ToString("F2", ic)}");
+        sb.Append($" -s material_print_temperature={p.PrintTemperatureDegC}");
+        sb.Append($" -s material_print_temperature_layer_0={p.PrintTemperatureDegC}");
+        sb.Append($" -s material_bed_temperature={p.BedTemperatureDegC}");
+        sb.Append($" -s material_bed_temperature_layer_0={p.BedTemperatureDegC}");
+
+        // Retraction
         sb.Append($" -s retraction_amount={p.RetractLengthMm.ToString("F2", ic)}");
         sb.Append($" -s retraction_speed={p.RetractSpeedMmS.ToString("F1", ic)}");
+
+        // Support — repeat in extruder context
+        sb.Append($" -s support_enable={p.SupportEnabled.ToString().ToLowerInvariant()}");
+        if (p.SupportEnabled)
+        {
+            var extPlacement = string.IsNullOrWhiteSpace(p.SupportPlacement) ? "everywhere" : p.SupportPlacement;
+            sb.Append($" -s support_type={extPlacement}");
+            sb.Append($" -s support_structure={p.SupportType}");
+            sb.Append($" -s support_infill_rate={p.SupportInfillDensityPct.ToString("F1", ic)}");
+            if (!string.IsNullOrWhiteSpace(p.SupportInfillPattern))
+                sb.Append($" -s support_pattern={p.SupportInfillPattern}");
+        }
+
+        // Cooling
+        sb.Append($" -s cool_fan_enabled={p.CoolingEnabled.ToString().ToLowerInvariant()}");
+        sb.Append($" -s cool_fan_speed={p.CoolingFanSpeedPct.ToString("F1", ic)}");
 
         // Settings with no default in fdmextruder.def.json — cause crashes if missing.
         sb.Append(" -s roofing_layer_count=0");
