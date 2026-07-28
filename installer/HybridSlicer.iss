@@ -4,7 +4,7 @@
 ; Automatically installs x64 or x86 build based on user system
 
 #define AppName    "HybridSlicer"
-#define AppVersion "1.1.0"
+#define AppVersion "1.2.0"
 #define AppExe     "HybridSlicer.exe"
 
 [Setup]
