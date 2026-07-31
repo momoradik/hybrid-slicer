@@ -110,6 +110,7 @@ interface SavedState {
   infillDensity: number
   supportInfillPattern: InfillPattern
   supportInfillDensity: number
+  adhesionType: 'none' | 'skirt' | 'brim' | 'raft'
   // Hybrid CNC options (only used when machine type is Hybrid)
   cncToolId: string
   machineEveryN: number
@@ -125,7 +126,7 @@ const _initState: SavedState = {
   models: [], selectedId: null, jobName: '', machineId: '', profileId: '', materialId: '',
   generatedJobId: null, activeTab: 'import', supportEnabled: false, supportType: 'normal',
   supportPlacement: 'everywhere', infillPattern: 'grid', infillDensity: 15,
-  supportInfillPattern: 'grid', supportInfillDensity: 15,
+  supportInfillPattern: 'grid', supportInfillDensity: 15, adhesionType: 'none',
   cncToolId: '', machineEveryN: 10, machineInnerWalls: false, avoidSupports: false,
   supportClearanceMm: 2.0, autoMachiningFrequency: false, zSafetyOffsetMm: 0,
   spindleRpmOverride: null,
@@ -170,6 +171,7 @@ export default function StlImport() {
   const [infillDensity, setInfillDensity] = useState<number>(() => _saved.infillDensity)
   const [supportInfillPattern, setSupportInfillPattern] = useState<InfillPattern>(() => _saved.supportInfillPattern)
   const [supportInfillDensity, setSupportInfillDensity] = useState<number>(() => _saved.supportInfillDensity)
+  const [adhesionType, setAdhesionType] = useState<'none' | 'skirt' | 'brim' | 'raft'>(() => _saved.adhesionType)
 
   // Hybrid CNC state (only shown when machine is Hybrid)
   const [cncToolId, setCncToolId]                       = useState(() => _saved.cncToolId)
@@ -255,6 +257,7 @@ export default function StlImport() {
   useEffect(() => { _saved.infillDensity = infillDensity }, [infillDensity])
   useEffect(() => { _saved.supportInfillPattern = supportInfillPattern }, [supportInfillPattern])
   useEffect(() => { _saved.supportInfillDensity = supportInfillDensity }, [supportInfillDensity])
+  useEffect(() => { _saved.adhesionType = adhesionType }, [adhesionType])
   useEffect(() => { _saved.cncToolId = cncToolId }, [cncToolId])
   useEffect(() => { _saved.machineEveryN = machineEveryN }, [machineEveryN])
   useEffect(() => { _saved.machineInnerWalls = machineInnerWalls }, [machineInnerWalls])
@@ -473,6 +476,7 @@ export default function StlImport() {
           fd.append('infillDensityPct', infillDensity.toString())
           fd.append('supportInfillPattern', supportInfillPattern)
           fd.append('supportInfillDensityPct', supportInfillDensity.toString())
+          fd.append('adhesionType', adhesionType)
           fd.append('bedIndex', bi.toString())
           const { jobId } = await jobsApi.uploadStl(fd)
           await jobsApi.slice(jobId)
@@ -530,6 +534,7 @@ export default function StlImport() {
       fd.append('infillDensityPct', infillDensity.toString())
       fd.append('supportInfillPattern', supportInfillPattern)
       fd.append('supportInfillDensityPct', supportInfillDensity.toString())
+      fd.append('adhesionType', adhesionType)
       const { jobId } = await uploadMutation.mutateAsync(fd)
       await sliceMutation.mutateAsync(jobId)
 
@@ -597,6 +602,7 @@ export default function StlImport() {
       fd.append('infillDensityPct', infillDensity.toString())
       fd.append('supportInfillPattern', supportInfillPattern)
       fd.append('supportInfillDensityPct', supportInfillDensity.toString())
+      fd.append('adhesionType', adhesionType)
       if (primary.bedIndex != null && selectedMachineBeds.length > 1)
         fd.append('bedIndex', primary.bedIndex.toString())
       const { jobId } = await jobsApi.uploadStl(fd)
@@ -632,7 +638,7 @@ export default function StlImport() {
     return JSON.stringify({
       models: bedModels.map(m => ({ id: m.id, t: m.transform })),
       machineId, profileId, materialId, supportEnabled, supportType, supportPlacement,
-      infillPattern, infillDensity, supportInfillPattern, supportInfillDensity, bi,
+      infillPattern, infillDensity, supportInfillPattern, supportInfillDensity, adhesionType, bi,
     })
   }
   const currentFingerprint = bedFingerprint(activeBedIndex)
@@ -972,6 +978,22 @@ export default function StlImport() {
             )}
           </div>
         )}
+
+        <Divider />
+
+        {/* Bed Adhesion */}
+        <section className="space-y-2">
+          <SectionHeader>Bed Adhesion</SectionHeader>
+          <Field label="Type">
+            <select className="input" value={adhesionType}
+              onChange={e => setAdhesionType(e.target.value as 'none' | 'skirt' | 'brim' | 'raft')}>
+              <option value="none">None</option>
+              <option value="skirt">Skirt</option>
+              <option value="brim">Brim</option>
+              <option value="raft">Raft</option>
+            </select>
+          </Field>
+        </section>
 
         <Divider />
 

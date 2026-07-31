@@ -71,7 +71,10 @@ public sealed record SlicingParameters(
     bool OriginIsBedCenter = true,
 
     // Extrusion
-    double MaterialFlowPct = 100.0);
+    double MaterialFlowPct = 100.0,
+
+    // Bed adhesion
+    string AdhesionType = "none");
 
 public sealed record SlicingResult(
     string GCodeFilePath,

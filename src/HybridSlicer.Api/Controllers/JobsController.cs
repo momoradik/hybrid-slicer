@@ -69,6 +69,7 @@ public sealed class JobsController : ControllerBase
             InfillDensityPct: request.InfillDensityPct,
             SupportInfillPattern: request.SupportInfillPattern,
             SupportInfillDensityPct: request.SupportInfillDensityPct,
+            AdhesionType: request.AdhesionType,
             BedIndex: request.BedIndex,
             ParentJobId: request.ParentJobId), ct);
 
@@ -373,6 +374,7 @@ public record UploadStlRequest(
     [FromForm] double? InfillDensityPct = 15,
     [FromForm] string SupportInfillPattern = "grid",
     [FromForm] double? SupportInfillDensityPct = null,
+    [FromForm] string AdhesionType = "none",
     [FromForm] int? BedIndex = null,
     [FromForm] Guid? ParentJobId = null);
 

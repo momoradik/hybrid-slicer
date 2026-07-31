@@ -88,6 +88,7 @@ public sealed class ImportStlHandler : IRequestHandler<ImportStlCommand, ImportS
             cmd.InfillDensityPct,
             cmd.SupportInfillPattern,
             cmd.SupportInfillDensityPct,
+            cmd.AdhesionType,
             cmd.BedIndex,
             cmd.ParentJobId);
 

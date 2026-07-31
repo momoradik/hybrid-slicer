@@ -16,6 +16,7 @@ public sealed record ImportStlCommand(
     double? InfillDensityPct = null,
     string SupportInfillPattern = "grid",
     double? SupportInfillDensityPct = null,
+    string AdhesionType = "none",
     int? BedIndex = null,
     Guid? ParentJobId = null) : IRequest<ImportStlResult>;
 

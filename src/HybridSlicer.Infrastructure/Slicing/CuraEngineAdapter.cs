@@ -216,7 +216,8 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         sb.Append($" -s machine_nozzle_size={p.NozzleDiameterMm.ToString("F2", ic)}");
         // Origin mode: must match the STL viewer and G-code preview coordinate system.
         sb.Append($" -s machine_center_is_zero={p.OriginIsBedCenter.ToString().ToLowerInvariant()}");
-        sb.Append(" -s adhesion_type=none");
+        var adhesion = string.IsNullOrWhiteSpace(p.AdhesionType) ? "none" : p.AdhesionType;
+        sb.Append($" -s adhesion_type={adhesion}");
 
         // ── Extruder-0 settings ───────────────────────────────────────────────
         // CuraEngine 5.x resolves most per-feature settings from the extruder context.

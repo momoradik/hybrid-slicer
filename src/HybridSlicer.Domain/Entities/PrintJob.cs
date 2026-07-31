@@ -29,6 +29,9 @@ public class PrintJob
     public string SupportInfillPattern { get; private set; } = "grid";
     public double? SupportInfillDensityPct { get; private set; }
 
+    // Bed adhesion
+    public string AdhesionType { get; private set; } = "none"; // none | skirt | brim | raft
+
     // Multi-bed: which bed this job belongs to (0-based). Null = single-bed / legacy.
     public int? BedIndex { get; private set; }
 
@@ -65,6 +68,7 @@ public class PrintJob
         double? infillDensityPct = null,
         string supportInfillPattern = "grid",
         double? supportInfillDensityPct = null,
+        string adhesionType = "none",
         int? bedIndex = null,
         Guid? parentJobId = null)
     {
@@ -89,6 +93,7 @@ public class PrintJob
             InfillDensityPct = infillDensityPct is > 0 and <= 100 ? infillDensityPct : null,
             SupportInfillPattern = string.IsNullOrWhiteSpace(supportInfillPattern) ? "grid" : supportInfillPattern,
             SupportInfillDensityPct = supportInfillDensityPct is > 0 and <= 100 ? supportInfillDensityPct : null,
+            AdhesionType = string.IsNullOrWhiteSpace(adhesionType) ? "none" : adhesionType,
             BedIndex = bedIndex,
             ParentJobId = parentJobId,
             CreatedAt = DateTime.UtcNow,

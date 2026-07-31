@@ -83,6 +83,11 @@ try
         {
             // Create the database if it doesn't exist; no-op if it already does.
             await db.Database.EnsureCreatedAsync();
+
+            // EnsureCreated does not apply migrations to existing databases.
+            // Add any new columns that may be missing from an older schema.
+            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE PrintJobs ADD COLUMN AdhesionType TEXT NOT NULL DEFAULT 'none'"); }
+            catch { /* column already exists */ }
         }
         else
         {

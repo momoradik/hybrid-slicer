@@ -95,6 +95,7 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
                 SupportPlacement:      job.SupportPlacement,
                 SupportInfillDensityPct: job.SupportInfillDensityPct ?? 15,
                 SupportInfillPattern:  string.IsNullOrWhiteSpace(job.SupportInfillPattern) ? "grid" : job.SupportInfillPattern,
+                AdhesionType:          string.IsNullOrWhiteSpace(job.AdhesionType) ? "none" : job.AdhesionType,
                 CoolingEnabled:        profile.CoolingEnabled,
                 CoolingFanSpeedPct:    profile.CoolingFanSpeedPct,
                 FilamentDiameterMm:    profile.PelletModeEnabled
