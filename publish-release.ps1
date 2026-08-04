@@ -91,7 +91,8 @@ Write-Host ""
 Write-Host "[3/7] Building frontend..." -ForegroundColor Cyan
 Push-Location $Web
 try {
-    npm run build 2>&1 | Out-Null
+    $npmCmd = if (Get-Command npm -ErrorAction SilentlyContinue) { "npm" } else { "C:\Program Files\nodejs\npm.cmd" }
+    & $npmCmd run build 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "npm build failed" }
 } finally { Pop-Location }
 Write-Host "      OK" -ForegroundColor Green
