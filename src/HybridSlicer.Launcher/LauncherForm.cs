@@ -21,7 +21,7 @@ public sealed class LauncherForm : Form
     private readonly WebView2 _webView;
 
     private string _serverStatus = "starting";
-    private int _port = 5000;
+    private int _port = 8080;
 
     public LauncherForm(Process server, string networkIp, string? curaPath)
     {
@@ -37,6 +37,7 @@ public sealed class LauncherForm : Form
         _updater.DownloadProgress += OnDownloadProgress;
         _updater.UpdateReady += OnUpdateReady;
         _updater.UpdateError += OnUpdateError;
+        _updater.UpToDate += OnUpToDate;
 
         Text            = "HybridSlicer";
         AutoScaleMode   = AutoScaleMode.None;
@@ -212,6 +213,12 @@ public sealed class LauncherForm : Form
         if (InvokeRequired) { Invoke(() => OnUpdateError(message)); return; }
         var escaped = message.Replace("'", "\\'").Replace("\n", " ");
         ExecuteScript($"onUpdateError('{escaped}')");
+    }
+
+    private void OnUpToDate()
+    {
+        if (InvokeRequired) { Invoke(OnUpToDate); return; }
+        ExecuteScript("onUpToDate()");
     }
 
     // ── Server health polling ───────────────────────────────────────────────

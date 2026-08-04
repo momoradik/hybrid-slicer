@@ -86,8 +86,13 @@ try
 
             // EnsureCreated does not apply migrations to existing databases.
             // Add any new columns that may be missing from an older schema.
-            try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE PrintJobs ADD COLUMN AdhesionType TEXT NOT NULL DEFAULT 'none'"); }
-            catch { /* column already exists */ }
+            string[] alters = [
+                "ALTER TABLE PrintJobs ADD COLUMN AdhesionType TEXT NOT NULL DEFAULT 'none'",
+                "ALTER TABLE PrintJobs ADD COLUMN GcodeHoming INTEGER NOT NULL DEFAULT 1",
+                "ALTER TABLE PrintJobs ADD COLUMN GcodeLevelling INTEGER NOT NULL DEFAULT 0",
+            ];
+            foreach (var sql in alters)
+                try { await db.Database.ExecuteSqlRawAsync(sql); } catch { /* column already exists */ }
         }
         else
         {

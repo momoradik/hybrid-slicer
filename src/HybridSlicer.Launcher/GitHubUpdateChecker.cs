@@ -63,6 +63,9 @@ public sealed class GitHubUpdateChecker : IDisposable
         delay.Start();
     }
 
+    /// <summary>Raised when the check completes and no update is needed.</summary>
+    public event Action? UpToDate;
+
     public async Task CheckForUpdateAsync()
     {
         try
@@ -73,6 +76,9 @@ public sealed class GitHubUpdateChecker : IDisposable
             if (!response.IsSuccessStatusCode)
             {
                 Log($"GitHub API returned {response.StatusCode}");
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
+                    response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                    UpdateError?.Invoke("GitHub authentication failed. Update token may be missing or expired.");
                 return;
             }
 
@@ -92,9 +98,13 @@ public sealed class GitHubUpdateChecker : IDisposable
             Log($"Current: {_currentVersion}, Remote: {remoteVersion}");
 
             if (remoteVersion <= _currentVersion)
+            {
+                Log("Already up to date");
+                UpToDate?.Invoke();
                 return;
+            }
 
-            // Find the .exe installer asset
+            // Find the .exe installer asset — use API url (works for private repos with token)
             string? assetUrl = null;
             string? assetName = null;
 
@@ -105,7 +115,8 @@ public sealed class GitHubUpdateChecker : IDisposable
                     name.EndsWith("-Installer.exe", StringComparison.OrdinalIgnoreCase) ||
                     (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && name.Contains("Setup", StringComparison.OrdinalIgnoreCase)))
                 {
-                    assetUrl = asset.GetProperty("browser_download_url").GetString();
+                    // Use API url (not browser_download_url) — works with Bearer token for private repos
+                    assetUrl = asset.GetProperty("url").GetString();
                     assetName = name;
                     break;
                 }

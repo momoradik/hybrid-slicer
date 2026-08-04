@@ -111,9 +111,13 @@ interface SavedState {
   supportInfillPattern: InfillPattern
   supportInfillDensity: number
   adhesionType: 'none' | 'skirt' | 'brim' | 'raft'
+  // G-code startup options
+  gcodeHoming: boolean
+  gcodeLevelling: boolean
   // Hybrid CNC options (only used when machine type is Hybrid)
   cncToolId: string
   machineEveryN: number
+  skipMachiningLayers: number  // skip first N layers before machining starts
   machineInnerWalls: boolean
   avoidSupports: boolean
   supportClearanceMm: number
@@ -127,7 +131,8 @@ const _initState: SavedState = {
   generatedJobId: null, activeTab: 'import', supportEnabled: false, supportType: 'normal',
   supportPlacement: 'everywhere', infillPattern: 'grid', infillDensity: 15,
   supportInfillPattern: 'grid', supportInfillDensity: 15, adhesionType: 'none',
-  cncToolId: '', machineEveryN: 10, machineInnerWalls: false, avoidSupports: false,
+  gcodeHoming: true, gcodeLevelling: false,
+  cncToolId: '', machineEveryN: 10, skipMachiningLayers: 0, machineInnerWalls: false, avoidSupports: false,
   supportClearanceMm: 2.0, autoMachiningFrequency: false, zSafetyOffsetMm: 0,
   spindleRpmOverride: null,
 }
@@ -173,9 +178,14 @@ export default function StlImport() {
   const [supportInfillDensity, setSupportInfillDensity] = useState<number>(() => _saved.supportInfillDensity)
   const [adhesionType, setAdhesionType] = useState<'none' | 'skirt' | 'brim' | 'raft'>(() => _saved.adhesionType)
 
+  // G-code startup options
+  const [gcodeHoming, setGcodeHoming]         = useState(() => _saved.gcodeHoming)
+  const [gcodeLevelling, setGcodeLevelling]   = useState(() => _saved.gcodeLevelling)
+
   // Hybrid CNC state (only shown when machine is Hybrid)
   const [cncToolId, setCncToolId]                       = useState(() => _saved.cncToolId)
   const [machineEveryN, setMachineEveryN]               = useState(() => _saved.machineEveryN)
+  const [skipMachiningLayers, setSkipMachiningLayers]   = useState(() => _saved.skipMachiningLayers)
   const [machineInnerWalls, setMachineInnerWalls]       = useState(() => _saved.machineInnerWalls)
   const [avoidSupports, setAvoidSupports]               = useState(() => _saved.avoidSupports)
   const [supportClearanceMm, setSupportClearanceMm]     = useState(() => _saved.supportClearanceMm)
@@ -258,8 +268,11 @@ export default function StlImport() {
   useEffect(() => { _saved.supportInfillPattern = supportInfillPattern }, [supportInfillPattern])
   useEffect(() => { _saved.supportInfillDensity = supportInfillDensity }, [supportInfillDensity])
   useEffect(() => { _saved.adhesionType = adhesionType }, [adhesionType])
+  useEffect(() => { _saved.gcodeHoming = gcodeHoming }, [gcodeHoming])
+  useEffect(() => { _saved.gcodeLevelling = gcodeLevelling }, [gcodeLevelling])
   useEffect(() => { _saved.cncToolId = cncToolId }, [cncToolId])
   useEffect(() => { _saved.machineEveryN = machineEveryN }, [machineEveryN])
+  useEffect(() => { _saved.skipMachiningLayers = skipMachiningLayers }, [skipMachiningLayers])
   useEffect(() => { _saved.machineInnerWalls = machineInnerWalls }, [machineInnerWalls])
   useEffect(() => { _saved.avoidSupports = avoidSupports }, [avoidSupports])
   useEffect(() => { _saved.supportClearanceMm = supportClearanceMm }, [supportClearanceMm])
@@ -477,6 +490,8 @@ export default function StlImport() {
           fd.append('supportInfillPattern', supportInfillPattern)
           fd.append('supportInfillDensityPct', supportInfillDensity.toString())
           fd.append('adhesionType', adhesionType)
+          fd.append('gcodeHoming', gcodeHoming.toString())
+          fd.append('gcodeLevelling', gcodeLevelling.toString())
           fd.append('bedIndex', bi.toString())
           const { jobId } = await jobsApi.uploadStl(fd)
           await jobsApi.slice(jobId)
@@ -506,6 +521,7 @@ export default function StlImport() {
               jobIds[0], cncToolId, machineEveryN,
               machineInnerWalls, avoidSupports, supportClearanceMm,
               autoMachiningFrequency, zSafetyOffsetMm, spindleRpmOverride,
+              0, 0, null, 0, 0, null, skipMachiningLayers,
             )
             await jobsApi.planHybrid(jobIds[0], machineEveryN)
           }
@@ -535,6 +551,8 @@ export default function StlImport() {
       fd.append('supportInfillPattern', supportInfillPattern)
       fd.append('supportInfillDensityPct', supportInfillDensity.toString())
       fd.append('adhesionType', adhesionType)
+      fd.append('gcodeHoming', gcodeHoming.toString())
+      fd.append('gcodeLevelling', gcodeLevelling.toString())
       const { jobId } = await uploadMutation.mutateAsync(fd)
       await sliceMutation.mutateAsync(jobId)
 
@@ -547,6 +565,7 @@ export default function StlImport() {
           jobId, cncToolId, machineEveryN,
           machineInnerWalls, avoidSupports, supportClearanceMm,
           autoMachiningFrequency, zSafetyOffsetMm, spindleRpmOverride,
+          0, 0, null, 0, 0, null, skipMachiningLayers,
         )
         await jobsApi.planHybrid(jobId, machineEveryN)
       }
@@ -603,6 +622,8 @@ export default function StlImport() {
       fd.append('supportInfillPattern', supportInfillPattern)
       fd.append('supportInfillDensityPct', supportInfillDensity.toString())
       fd.append('adhesionType', adhesionType)
+      fd.append('gcodeHoming', gcodeHoming.toString())
+      fd.append('gcodeLevelling', gcodeLevelling.toString())
       if (primary.bedIndex != null && selectedMachineBeds.length > 1)
         fd.append('bedIndex', primary.bedIndex.toString())
       const { jobId } = await jobsApi.uploadStl(fd)
@@ -1147,6 +1168,28 @@ export default function StlImport() {
           </Field>
         </section>
 
+        <Divider />
+
+        {/* G-code Startup */}
+        <section className="space-y-2">
+          <SectionHeader>G-code Startup</SectionHeader>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input type="checkbox" checked={gcodeHoming}
+                onChange={e => setGcodeHoming(e.target.checked)} className="accent-primary" />
+              Home all axes (G28)
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input type="checkbox" checked={gcodeLevelling}
+                onChange={e => setGcodeLevelling(e.target.checked)} className="accent-primary" />
+              Bed levelling (G29)
+            </label>
+          </div>
+          <p className="text-[10px] text-gray-600">
+            Selected commands are inserted at the start of the G-code, replacing Cura defaults.
+          </p>
+        </section>
+
         {/* Multi-bed sequencing (only for multi-bed machines) */}
         {selectedMachineBeds.length > 1 && (
           <>
@@ -1194,6 +1237,20 @@ export default function StlImport() {
                     <span className="text-gray-600">Feed {selectedCncTool.recommendedFeedMmPerMin} mm/min</span>
                   </div>
                 )}
+              </Field>
+
+              <Field label="Skip first N layers before machining">
+                <div className="flex items-center gap-2">
+                  <input type="number" min={0} max={500} step={1} value={skipMachiningLayers}
+                    onChange={e => setSkipMachiningLayers(Math.max(0, Math.round(+e.target.value) || 0))}
+                    className="input w-20 text-center" />
+                  <span className="text-xs text-gray-500">layers</span>
+                  {selectedProfile && skipMachiningLayers > 0 && (
+                    <span className="text-xs text-gray-600">
+                      ≈ {(skipMachiningLayers * (selectedProfile.layerHeightMm ?? 0.2)).toFixed(1)} mm
+                    </span>
+                  )}
+                </div>
               </Field>
 
               {!autoMachiningFrequency && (

@@ -70,6 +70,8 @@ public sealed class JobsController : ControllerBase
             SupportInfillPattern: request.SupportInfillPattern,
             SupportInfillDensityPct: request.SupportInfillDensityPct,
             AdhesionType: request.AdhesionType,
+            GcodeHoming: request.GcodeHoming,
+            GcodeLevelling: request.GcodeLevelling,
             BedIndex: request.BedIndex,
             ParentJobId: request.ParentJobId), ct);
 
@@ -113,7 +115,8 @@ public sealed class JobsController : ControllerBase
                 request.SpindleStartZ,
                 request.SpindleEndX,
                 request.SpindleEndY,
-                request.SpindleEndZ), ct);
+                request.SpindleEndZ,
+                request.SkipMachiningLayers), ct);
         return Accepted(result);
     }
 
@@ -375,6 +378,8 @@ public record UploadStlRequest(
     [FromForm] string SupportInfillPattern = "grid",
     [FromForm] double? SupportInfillDensityPct = null,
     [FromForm] string AdhesionType = "none",
+    [FromForm] bool GcodeHoming = true,
+    [FromForm] bool GcodeLevelling = false,
     [FromForm] int? BedIndex = null,
     [FromForm] Guid? ParentJobId = null);
 
@@ -393,7 +398,8 @@ public record GenerateToolpathsRequest(
     double? SpindleStartZ           = null,
     double SpindleEndX              = 0.0,
     double SpindleEndY              = 0.0,
-    double? SpindleEndZ             = null);
+    double? SpindleEndZ             = null,
+    int    SkipMachiningLayers      = 0);
 public record PlanHybridRequest(int MachineEveryNLayers);
 public record MergeBedsRequest(
     IReadOnlyList<Guid> JobIds,

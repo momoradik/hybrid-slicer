@@ -32,6 +32,10 @@ public class PrintJob
     // Bed adhesion
     public string AdhesionType { get; private set; } = "none"; // none | skirt | brim | raft
 
+    // G-code startup options
+    public bool GcodeHoming { get; private set; } = true;
+    public bool GcodeLevelling { get; private set; }
+
     // Multi-bed: which bed this job belongs to (0-based). Null = single-bed / legacy.
     public int? BedIndex { get; private set; }
 
@@ -69,6 +73,8 @@ public class PrintJob
         string supportInfillPattern = "grid",
         double? supportInfillDensityPct = null,
         string adhesionType = "none",
+        bool gcodeHoming = true,
+        bool gcodeLevelling = false,
         int? bedIndex = null,
         Guid? parentJobId = null)
     {
@@ -94,6 +100,8 @@ public class PrintJob
             SupportInfillPattern = string.IsNullOrWhiteSpace(supportInfillPattern) ? "grid" : supportInfillPattern,
             SupportInfillDensityPct = supportInfillDensityPct is > 0 and <= 100 ? supportInfillDensityPct : null,
             AdhesionType = string.IsNullOrWhiteSpace(adhesionType) ? "none" : adhesionType,
+            GcodeHoming = gcodeHoming,
+            GcodeLevelling = gcodeLevelling,
             BedIndex = bedIndex,
             ParentJobId = parentJobId,
             CreatedAt = DateTime.UtcNow,

@@ -89,6 +89,8 @@ public sealed class ImportStlHandler : IRequestHandler<ImportStlCommand, ImportS
             cmd.SupportInfillPattern,
             cmd.SupportInfillDensityPct,
             cmd.AdhesionType,
+            cmd.GcodeHoming,
+            cmd.GcodeLevelling,
             cmd.BedIndex,
             cmd.ParentJobId);
 

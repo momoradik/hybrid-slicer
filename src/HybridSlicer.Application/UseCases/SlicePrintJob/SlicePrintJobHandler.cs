@@ -13,6 +13,7 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
     private readonly IPrintJobRepository _jobs;
     private readonly IPrintProfileRepository _printProfiles;
     private readonly IMachineProfileRepository _machines;
+    private readonly IMaterialRepository _materials;
     private readonly ISlicingEngine _slicer;
     private readonly IMultiExtruderPostProcessor _multiExtruder;
     private readonly ICustomGCodeBlockRepository _customGCode;
@@ -23,6 +24,7 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
         IPrintJobRepository jobs,
         IPrintProfileRepository printProfiles,
         IMachineProfileRepository machines,
+        IMaterialRepository materials,
         ISlicingEngine slicer,
         IMultiExtruderPostProcessor multiExtruder,
         ICustomGCodeBlockRepository customGCode,
@@ -32,6 +34,7 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
         _jobs = jobs;
         _printProfiles = printProfiles;
         _machines = machines;
+        _materials = materials;
         _slicer = slicer;
         _multiExtruder = multiExtruder;
         _customGCode = customGCode;
@@ -49,6 +52,9 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
 
         var machine = await _machines.GetByIdAsync(job.MachineProfileId, ct)
             ?? throw new DomainException("MACHINE_NOT_FOUND", $"Machine profile {job.MachineProfileId} not found.");
+
+        // Resolve material for temperature override
+        var material = await _materials.GetByIdAsync(job.MaterialId, ct);
 
         // Resolve bed dimensions: use per-bed size if this is a multi-bed job
         double sliceBedWidth = machine.BedWidthMm, sliceBedDepth = machine.BedDepthMm, sliceBedHeight = machine.BedHeightMm;
@@ -86,8 +92,9 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
                 FirstLayerSpeedMmS:    profile.FirstLayerSpeedMmS,
                 InfillDensityPct:      job.InfillDensityPct ?? profile.InfillDensityPct,
                 InfillPattern:         string.IsNullOrWhiteSpace(job.InfillPattern) ? profile.InfillPattern : job.InfillPattern,
-                PrintTemperatureDegC:  profile.PrintTemperatureDegC,
-                BedTemperatureDegC:    profile.BedTemperatureDegC,
+                // Use material temperature when available, fall back to profile defaults
+                PrintTemperatureDegC:  material?.PrintTempMaxDegC > 0 ? material.PrintTempMaxDegC : profile.PrintTemperatureDegC,
+                BedTemperatureDegC:    material?.BedTempMaxDegC > 0 ? material.BedTempMaxDegC : profile.BedTemperatureDegC,
                 RetractLengthMm:       profile.RetractLengthMm,
                 RetractSpeedMmS:       profile.RetractSpeedMmS,
                 SupportEnabled:        job.SupportEnabled,
@@ -117,6 +124,7 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
             var enabledBlocks = await _customGCode.GetEnabledAsync(ct);
             await _multiExtruder.ProcessAsync(result.GCodeFilePath, machine, enabledBlocks, ct);
 
+            await ReplaceStartupGCodeAsync(result.GCodeFilePath, job.GcodeHoming, job.GcodeLevelling, parameters, ct);
             await InjectCustomGCodeAsync(result.GCodeFilePath, ct);
 
             // Final step: translate from bed-centre coordinates to real machine coordinates
@@ -143,6 +151,58 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
             await _jobs.UpdateAsync(job, ct);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Strips Cura's default startup G-code (everything before the first ;LAYER:0)
+    /// and replaces it with user-selected startup commands (homing, levelling, temps).
+    /// </summary>
+    private async Task ReplaceStartupGCodeAsync(
+        string gcodePath, bool homing, bool levelling, SlicingParameters p, CancellationToken ct)
+    {
+        var lines = await File.ReadAllLinesAsync(gcodePath, ct);
+
+        // Find the first ;LAYER:0 marker — everything before it is Cura's preamble
+        var layerStart = -1;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].TrimStart().StartsWith(";LAYER:0", StringComparison.OrdinalIgnoreCase))
+            { layerStart = i; break; }
+        }
+
+        if (layerStart < 0) return; // no layer marker found, leave file as-is
+
+        // Preserve Cura metadata comments (;LAYER_COUNT, ;TIME, ;Filament, ;FLAVOR, etc.)
+        var sb = new StringBuilder();
+        foreach (var line in lines.Take(layerStart))
+        {
+            var t = line.TrimStart();
+            if (t.StartsWith(";LAYER_COUNT:") || t.StartsWith(";TIME:") ||
+                t.StartsWith(";Filament used:") || t.StartsWith(";FLAVOR:") ||
+                t.StartsWith(";generated") || t.StartsWith(";MINX:") ||
+                t.StartsWith(";MINY:") || t.StartsWith(";MINZ:") ||
+                t.StartsWith(";MAXX:") || t.StartsWith(";MAXY:") ||
+                t.StartsWith(";MAXZ:"))
+                sb.AppendLine(line);
+        }
+
+        // Insert user-selected startup commands
+        sb.AppendLine("; === HybridSlicer Startup ===");
+        if (homing)    sb.AppendLine("G28          ; home all axes");
+        if (levelling) sb.AppendLine("G29          ; bed levelling");
+        sb.AppendLine($"M104 S{p.PrintTemperatureDegC} ; set extruder temp");
+        sb.AppendLine($"M140 S{p.BedTemperatureDegC}   ; set bed temp");
+        sb.AppendLine($"M109 S{p.PrintTemperatureDegC} ; wait for extruder");
+        sb.AppendLine($"M190 S{p.BedTemperatureDegC}   ; wait for bed");
+        sb.AppendLine("G92 E0       ; reset extruder");
+        sb.AppendLine("; === End Startup ===");
+        sb.AppendLine();
+
+        // Append everything from ;LAYER:0 onward
+        for (var i = layerStart; i < lines.Length; i++)
+            sb.AppendLine(lines[i]);
+
+        await File.WriteAllTextAsync(gcodePath, sb.ToString(), ct);
     }
 
     private async Task InjectCustomGCodeAsync(string gcodePath, CancellationToken ct)

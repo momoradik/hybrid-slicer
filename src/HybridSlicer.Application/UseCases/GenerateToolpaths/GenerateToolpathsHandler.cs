@@ -273,7 +273,8 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                 if (ld.OuterWallPaths.Count == 0 && ld.InnerWallPaths.Count == 0) continue; // not a part layer
 
                 partLayerCount++;
-                if (partLayerCount % cmd.MachineEveryNLayers == 0)
+                if (partLayerCount <= cmd.SkipMachiningLayers) continue; // skip first N layers
+                if ((partLayerCount - cmd.SkipMachiningLayers) % cmd.MachineEveryNLayers == 0)
                     manualLayers.Add(li);
             }
             layersToMachine = manualLayers;

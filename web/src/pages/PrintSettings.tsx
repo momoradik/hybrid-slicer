@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { printProfilesApi } from '../api/client'
@@ -66,14 +66,22 @@ export default function PrintSettings() {
   const { data: profiles = [] } = useQuery({ queryKey: ['printProfiles'], queryFn: printProfilesApi.getAll })
   const [draft, setDraft]       = useState<DraftProfile | null>(null)
   const [advanced, setAdvanced] = useState(false)
+  const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null)
+
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok })
+    setTimeout(() => setToast(null), 3000)
+  }
 
   const createMutation = useMutation({
     mutationFn: (d: DraftProfile) => printProfilesApi.create(d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['printProfiles'] }); setDraft(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['printProfiles'] }); setDraft(null); showToast('Profile created') },
+    onError: (e: any) => showToast(e?.response?.data?.title ?? 'Failed to create profile', false),
   })
   const updateMutation = useMutation({
     mutationFn: (d: DraftProfile) => printProfilesApi.update(d.id!, d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['printProfiles'] }); setDraft(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['printProfiles'] }); setDraft(null); showToast('Settings saved') },
+    onError: (e: any) => showToast(e?.response?.data?.title ?? 'Failed to save settings', false),
   })
   const deleteMutation = useMutation({
     mutationFn: (id: string) => printProfilesApi.delete(id),
@@ -409,6 +417,14 @@ export default function PrintSettings() {
           </div>
         </div>
       )}
+
+      {/* Toast notification */}
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium transition-all
+          ${toast.ok ? 'bg-emerald-900/90 text-emerald-200 border border-emerald-700' : 'bg-red-900/90 text-red-200 border border-red-700'}`}>
+          {toast.ok ? '✓' : '✕'} {toast.msg}
+        </div>
+      )}
     </div>
   )
 }
@@ -472,9 +488,32 @@ function NumIn({ value, min, max, step = 1, onChange }: {
   value: number; min?: number; max?: number; step?: number
   onChange: (v: number) => void
 }) {
+  const [raw, setRaw] = useState(String(value))
+  const ref = useRef<HTMLInputElement>(null)
+
+  // Sync when parent value changes (but not while user is editing)
+  useEffect(() => {
+    if (document.activeElement !== ref.current) setRaw(String(value))
+  }, [value])
+
   return (
-    <input type="number" min={min} max={max} step={step} value={value}
-      onChange={e => onChange(+e.target.value)}
+    <input ref={ref} type="number" min={min} max={max} step={step} value={raw}
+      onChange={e => {
+        setRaw(e.target.value)
+        const n = +e.target.value
+        if (e.target.value !== '' && !isNaN(n)) onChange(n)
+      }}
+      onBlur={() => {
+        const n = +raw
+        if (raw === '' || isNaN(n)) {
+          const fb = min ?? 0
+          setRaw(String(fb))
+          onChange(fb)
+        } else {
+          setRaw(String(n))
+          onChange(n)
+        }
+      }}
       className="input w-full" />
   )
 }

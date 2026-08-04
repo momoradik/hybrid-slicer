@@ -66,8 +66,8 @@ static class Program
         if (curaExe is not null)
             PatchAppsettings(baseDir, curaExe, curaDef!, curaExt!);
 
-        // ── 2. Kill any existing process on port 5000 ────────────────────────────
-        KillOnPort(5000);
+        // ── 2. Kill any existing process on port 8080 ────────────────────────────
+        KillOnPort(8080);
 
         // ── 3. Start the API server ──────────────────────────────────────────────
         var apiExe = Path.Combine(baseDir, "HybridSlicer.Api.exe");
@@ -84,7 +84,7 @@ static class Program
         var server = Process.Start(new ProcessStartInfo
         {
             FileName         = apiExe,
-            Arguments        = "--urls http://*:5000",
+            Arguments        = "--urls http://*:8080",
             WorkingDirectory = baseDir,
             UseShellExecute  = false,
             CreateNoWindow   = true,
@@ -181,7 +181,7 @@ static class Program
             root["CuraEngine"]!["ExecutablePath"]          = exe;
             root["CuraEngine"]!["DefinitionsPath"]          = def;
             root["CuraEngine"]!["ExtruderDefinitionsPath"]  = ext;
-            root["Urls"] = "http://*:5000";
+            root["Urls"] = "http://*:8080";
             File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         }
         catch { }

@@ -44,7 +44,9 @@ public sealed record GenerateToolpathsCommand(
     /// <summary>Spindle end position Y (mm).</summary>
     double SpindleEndY = 0.0,
     /// <summary>Spindle end position Z (mm). Null = same as start Z.</summary>
-    double? SpindleEndZ = null) : IRequest<GenerateToolpathsResult>;
+    double? SpindleEndZ = null,
+    /// <summary>Skip the first N part layers before starting machining.</summary>
+    int SkipMachiningLayers = 0) : IRequest<GenerateToolpathsResult>;
 
 public sealed record GenerateToolpathsResult(
     Guid                 JobId,

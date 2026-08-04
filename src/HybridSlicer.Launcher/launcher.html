@@ -484,6 +484,17 @@
     showBanner('Update Check Failed', message || 'Could not check for updates. Will retry on next launch.',
       [{ label: 'Dismiss', style: 'ghost', action: function() { hideBanner(); } }]);
   }
+
+  function onUpToDate() {
+    // Reset the check button immediately
+    btnCheck.textContent = 'Check for Updates';
+    btnCheck.disabled = false;
+    btnCheck.classList.remove('checking');
+    showBanner('Up to Date', 'You are running the latest version.',
+      [{ label: 'OK', style: 'ghost', action: function() { hideBanner(); } }]);
+    // Auto-dismiss after 4 seconds
+    setTimeout(function() { hideBanner(); }, 4000);
+  }
 </script>
 </body>
 </html>

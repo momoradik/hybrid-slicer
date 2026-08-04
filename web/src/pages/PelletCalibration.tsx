@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { printProfilesApi } from '../api/client'
-import type { PrintProfile } from '../types'
+import { printProfilesApi, machineProfilesApi } from '../api/client'
+import type { PrintProfile, MachineProfile } from '../types'
 
 // ── G-code generation helpers ─────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ function effectiveNozzle(p: PrintProfile): number {
 }
 
 /** Shared startup G-code: heat, home, prime line */
-function gcodeHeader(profile: PrintProfile): string {
+function gcodeHeader(profile: PrintProfile, ox = 0, oy = 0): string {
   const nozzle = effectiveNozzle(profile)
   const dF     = effectiveDiam(profile)
   const h      = profile.layerHeightMm
@@ -36,6 +36,7 @@ function gcodeHeader(profile: PrintProfile): string {
     `; Layer height   : ${profile.layerHeightMm} mm`,
     `; Virtual diam   : ${dF} mm  (pellet mode: ${profile.pelletModeEnabled ? 'ON' : 'OFF'})`,
     `; Base flow      : ${profile.materialFlowPct} %`,
+    `; Machine offset : X=${ox} Y=${oy}`,
     '; ============================================================',
     '',
     `M104 S${profile.printTemperatureDegC}   ; set extruder temp (no wait)`,
@@ -49,10 +50,10 @@ function gcodeHeader(profile: PrintProfile): string {
     '',
     '; --- Prime line ---',
     `G0 Z${(h * 3).toFixed(2)} F3000`,
-    'G0 X10.0 Y5.0 F5000',
+    `G0 X${(10 + ox).toFixed(1)} Y${(5 + oy).toFixed(1)} F5000`,
     `G0 Z${h.toFixed(3)} F1000`,
     'G92 E0',
-    `G1 X70.0 Y5.0 E${primeE.toFixed(4)} F${(profile.printSpeedMmS * 60).toFixed(0)}`,
+    `G1 X${(70 + ox).toFixed(1)} Y${(5 + oy).toFixed(1)} E${primeE.toFixed(4)} F${(profile.printSpeedMmS * 60).toFixed(0)}`,
     `G1 E${(primeE - RETRACT_MM).toFixed(4)} F${RETRACT_FMPM}   ; retract`,
     `G0 Z${(h * 3).toFixed(2)} F3000`,
     '',
@@ -73,15 +74,15 @@ function gcodeFooter(): string {
   ].join('\n')
 }
 
-function generateLineTest(profile: PrintProfile, flowSteps: number[]): string {
+function generateLineTest(profile: PrintProfile, flowSteps: number[], ox = 0, oy = 0): string {
   const nozzle  = effectiveNozzle(profile)
   const dF      = effectiveDiam(profile)
   const h       = profile.layerHeightMm
   const speed   = profile.printSpeedMmS
-  const startX  = 10
+  const startX  = 10 + ox
   const lineLen = 100
   const yGap    = 8
-  const yStart0 = 20
+  const yStart0 = 20 + oy
   const z       = h
 
   const out: string[] = [
@@ -112,14 +113,14 @@ function generateLineTest(profile: PrintProfile, flowSteps: number[]): string {
   return out.join('\n')
 }
 
-function generateFlowTower(profile: PrintProfile, flowSteps: number[]): string {
+function generateFlowTower(profile: PrintProfile, flowSteps: number[], ox = 0, oy = 0): string {
   const nozzle        = effectiveNozzle(profile)
   const dF            = effectiveDiam(profile)
   const h             = profile.layerHeightMm
   const speed         = profile.printSpeedMmS
   const sectionLayers = Math.max(1, Math.round(5 / h))
   const side          = 20
-  const cx = 50, cy = 50
+  const cx = 50 + ox, cy = 50 + oy
   const corners = [
     [cx - side / 2, cy - side / 2],
     [cx + side / 2, cy - side / 2],
@@ -164,14 +165,14 @@ function generateFlowTower(profile: PrintProfile, flowSteps: number[]): string {
   return out.join('\n')
 }
 
-function generateCubeTest(profile: PrintProfile): string {
+function generateCubeTest(profile: PrintProfile, ox = 0, oy = 0): string {
   const nozzle      = effectiveNozzle(profile)
   const dF          = effectiveDiam(profile)
   const h           = profile.layerHeightMm
   const speed       = profile.printSpeedMmS
   const totalLayers = Math.round(10 / h)
   const side        = 20
-  const cx = 50, cy = 50
+  const cx = 50 + ox, cy = 50 + oy
   const corners = [
     [cx - side / 2, cy - side / 2],
     [cx + side / 2, cy - side / 2],
@@ -260,10 +261,15 @@ export default function PelletCalibration() {
     queryKey: ['printProfiles'],
     queryFn:  printProfilesApi.getAll,
   })
+  const { data: machines = [] } = useQuery({
+    queryKey: ['machineProfiles'],
+    queryFn:  machineProfilesApi.getAll,
+  })
 
   const pelletProfiles = profiles.filter(p => p.pelletModeEnabled)
 
   const [selectedId,    setSelectedId]    = useState<string>('')
+  const [machineId,     setMachineId]     = useState<string>('')
   const [lineFlow,      setLineFlow]      = useState<FlowConfig>({ min: 80, max: 120, step: 5 })
   const [towerFlow,     setTowerFlow]     = useState<FlowConfig>({ min: 80, max: 120, step: 10 })
   const [tutorialOpen,  setTutorialOpen]  = useState(true)
@@ -273,6 +279,11 @@ export default function PelletCalibration() {
   const [measuredWidth, setMeasuredWidth] = useState('')
 
   const profile    = useMemo(() => profiles.find(p => p.id === selectedId) ?? null, [profiles, selectedId])
+  const machine    = useMemo(() => machines.find(m => m.id === machineId) ?? null, [machines, machineId])
+
+  // Machine bed offset: coordinates where the bed starts in machine space
+  const bedOffsetX = machine?.bedPositionXMm ?? 0
+  const bedOffsetY = machine?.bedPositionYMm ?? 0
   const lineSteps  = useMemo(() => flowSteps(lineFlow),  [lineFlow])
   const towerSteps = useMemo(() => flowSteps(towerFlow), [towerFlow])
 
@@ -288,17 +299,18 @@ export default function PelletCalibration() {
 
   function generate(type: 'line' | 'tower' | 'cube') {
     if (!profile) return
-    const head = gcodeHeader(profile)
+    const ox = bedOffsetX, oy = bedOffsetY
+    const head = gcodeHeader(profile, ox, oy)
     const foot = gcodeFooter()
     let body = '', name = ''
     if (type === 'line') {
-      body = generateLineTest(profile, lineSteps)
+      body = generateLineTest(profile, lineSteps, ox, oy)
       name = `${profile.name}_flow_lines.gcode`
     } else if (type === 'tower') {
-      body = generateFlowTower(profile, towerSteps)
+      body = generateFlowTower(profile, towerSteps, ox, oy)
       name = `${profile.name}_flow_tower.gcode`
     } else {
-      body = generateCubeTest(profile)
+      body = generateCubeTest(profile, ox, oy)
       name = `${profile.name}_cube_test.gcode`
     }
     downloadGCode(name, head + '\n' + body + '\n' + foot)
@@ -491,6 +503,22 @@ export default function PelletCalibration() {
               </div>
             )}
           </div>
+        )}
+      </div>
+
+      {/* ── Machine Selector (for coordinate offset) ── */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">
+        <h3 className="font-medium text-white">Machine (for coordinate offset)</h3>
+        <select className="input w-full" value={machineId} onChange={e => setMachineId(e.target.value)}>
+          <option value="">None (no offset)</option>
+          {machines.map(m => (
+            <option key={m.id} value={m.id}>{m.name} — bed at ({m.bedPositionXMm}, {m.bedPositionYMm})</option>
+          ))}
+        </select>
+        {machine && (
+          <p className="text-xs text-gray-500">
+            All G-code coordinates will be offset by X+{bedOffsetX} Y+{bedOffsetY} mm
+          </p>
         )}
       </div>
 
