@@ -10,7 +10,10 @@ $ApiOut      = "$Root\src\HybridSlicer.Api\bin\Debug\net8.0"
 $LauncherOut = "$Root\src\HybridSlicer.Launcher\bin\Debug\net8.0-windows"
 $PublishDir  = "$Root\publish"
 $LogDir      = "$Root\logs"
-$Iscc        = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+$Iscc        = @(
+    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
 
 $LocalIP = (
     Get-NetIPAddress -AddressFamily IPv4 |

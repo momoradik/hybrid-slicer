@@ -20,7 +20,10 @@ $Root       = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Web        = "$Root\web"
 $PublishDir = "$Root\publish"
 $DistDir    = "$Root\dist"
-$Iscc       = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+$Iscc       = @(
+    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
 $IssFile    = "$Root\installer\HybridSlicer.iss"
 
 # ── 0. Read version ────────────────────────────────────────────────────────
