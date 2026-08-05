@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { printProfilesApi, machineProfilesApi } from '../api/client'
+import GCodePreview3D, { type BedInfo } from '../components/viewer/GCodePreview3D'
 import type { PrintProfile } from '../types'
 
 // ── G-code generation helpers ─────────────────────────────────────────────────
@@ -275,6 +276,9 @@ export default function PelletCalibration() {
   const [tutorialOpen,  setTutorialOpen]  = useState(true)
   const [activeSection, setActiveSection] = useState<'concepts' | 'formula' | 'tips' | null>('concepts')
 
+  // Preview state
+  const [previewGCode, setPreviewGCode] = useState<string | null>(null)
+
   // Result advisor state
   const [measuredWidth, setMeasuredWidth] = useState('')
 
@@ -297,23 +301,53 @@ export default function PelletCalibration() {
     return getLineAdvice(w, nozzle, vDiam)
   }, [measuredWidth, nozzle, vDiam, profile])
 
-  function generate(type: 'line' | 'tower' | 'cube') {
-    if (!profile) return
+  // Build bed info for preview from selected machine
+  const previewBeds = useMemo<BedInfo[]>(() => {
+    if (!machine) return [{ index: 0, widthMm: 220, depthMm: 220, positionXMm: 0, positionYMm: 0 }]
+    try {
+      const raw = JSON.parse(machine.bedsJson || '[]') as any[]
+      if (raw.length > 0)
+        return raw.map((b: any, i: number) => ({
+          index: b.index ?? b.Index ?? i,
+          widthMm: b.widthMm ?? b.WidthMm ?? machine.bedWidthMm,
+          depthMm: b.depthMm ?? b.DepthMm ?? machine.bedDepthMm,
+          positionXMm: b.positionXMm ?? b.PositionXMm ?? 0,
+          positionYMm: b.positionYMm ?? b.PositionYMm ?? 0,
+        }))
+    } catch { /* fall through */ }
+    return [{ index: 0, widthMm: machine.bedWidthMm, depthMm: machine.bedDepthMm, positionXMm: machine.bedPositionXMm ?? 0, positionYMm: machine.bedPositionYMm ?? 0 }]
+  }, [machine])
+
+  const previewVolume = useMemo(() => ({
+    width: machine?.travelXMm ?? machine?.bedWidthMm ?? 220,
+    depth: machine?.travelYMm ?? machine?.bedDepthMm ?? 220,
+    height: machine?.travelZMm ?? machine?.bedHeightMm ?? 250,
+  }), [machine])
+
+  function buildGCode(type: 'line' | 'tower' | 'cube'): string | null {
+    if (!profile) return null
     const ox = bedOffsetX, oy = bedOffsetY
     const head = gcodeHeader(profile, ox, oy)
     const foot = gcodeFooter()
-    let body = '', name = ''
-    if (type === 'line') {
-      body = generateLineTest(profile, lineSteps, ox, oy)
-      name = `${profile.name}_flow_lines.gcode`
-    } else if (type === 'tower') {
-      body = generateFlowTower(profile, towerSteps, ox, oy)
-      name = `${profile.name}_flow_tower.gcode`
-    } else {
-      body = generateCubeTest(profile, ox, oy)
-      name = `${profile.name}_cube_test.gcode`
-    }
-    downloadGCode(name, head + '\n' + body + '\n' + foot)
+    let body = ''
+    if (type === 'line')       body = generateLineTest(profile, lineSteps, ox, oy)
+    else if (type === 'tower') body = generateFlowTower(profile, towerSteps, ox, oy)
+    else                       body = generateCubeTest(profile, ox, oy)
+    return head + '\n' + body + '\n' + foot
+  }
+
+  function preview(type: 'line' | 'tower' | 'cube') {
+    setPreviewGCode(buildGCode(type))
+  }
+
+  function generate(type: 'line' | 'tower' | 'cube') {
+    const gcode = buildGCode(type)
+    if (!gcode) return
+    setPreviewGCode(gcode)
+    const name = type === 'line' ? `${profile!.name}_flow_lines.gcode`
+               : type === 'tower' ? `${profile!.name}_flow_tower.gcode`
+               : `${profile!.name}_cube_test.gcode`
+    downloadGCode(name, gcode)
   }
 
   return (
@@ -628,10 +662,16 @@ export default function PelletCalibration() {
                 </div>
               </div>
 
-              <button onClick={() => generate('line')}
-                className="px-4 py-2.5 bg-amber-700 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition w-full">
-                Download Flow Line Test G-code
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => preview('line')}
+                  className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition flex-1">
+                  Preview
+                </button>
+                <button onClick={() => generate('line')}
+                  className="px-4 py-2.5 bg-amber-700 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition flex-1">
+                  Download G-code
+                </button>
+              </div>
 
               {/* Result Advisor */}
               <div className="border-t border-gray-800 pt-4 space-y-3">
@@ -756,10 +796,16 @@ export default function PelletCalibration() {
                 </div>
               </div>
 
-              <button onClick={() => generate('tower')}
-                className="px-4 py-2.5 bg-blue-700 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition w-full">
-                Download Flow Tower G-code
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => preview('tower')}
+                  className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition flex-1">
+                  Preview
+                </button>
+                <button onClick={() => generate('tower')}
+                  className="px-4 py-2.5 bg-blue-700 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition flex-1">
+                  Download G-code
+                </button>
+              </div>
 
               <div className="text-xs text-gray-600 bg-gray-800/40 rounded-lg p-3">
                 After printing, set the best-performing flow % as your <span className="text-gray-400">Base Flow</span> in the profile.
@@ -794,10 +840,16 @@ export default function PelletCalibration() {
                 <SummaryRow label="Wall target" value={`≈ ${effectiveNozzle(profile).toFixed(2)} mm`} highlight />
               </div>
 
-              <button onClick={() => generate('cube')}
-                className="px-4 py-2.5 bg-green-700 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition w-full">
-                Download Cube Validation G-code
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => preview('cube')}
+                  className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition flex-1">
+                  Preview
+                </button>
+                <button onClick={() => generate('cube')}
+                  className="px-4 py-2.5 bg-green-700 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition flex-1">
+                  Download G-code
+                </button>
+              </div>
 
               <div className="text-xs text-gray-600 bg-green-950/10 border border-green-900/30 rounded-lg p-3">
                 If the cube passes, your pellet profile is calibrated. You can now slice parts with this profile and
@@ -806,6 +858,31 @@ export default function PelletCalibration() {
             </div>
           </StepCard>
         </>
+      )}
+
+      {/* ── G-code Preview ── */}
+      {previewGCode && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
+            <h3 className="font-medium text-white">G-code Preview</h3>
+            <button onClick={() => setPreviewGCode(null)}
+              className="text-xs text-gray-500 hover:text-gray-300 transition">
+              Close
+            </button>
+          </div>
+          <div className="h-[500px]">
+            <GCodePreview3D
+              gcode={previewGCode}
+              buildVolume={previewVolume}
+              lineWidth={profile ? effectiveNozzle(profile) : 0.4}
+              className="w-full h-full"
+              travelX={machine?.travelXMm}
+              travelY={machine?.travelYMm}
+              travelZ={machine?.travelZMm}
+              beds={previewBeds}
+            />
+          </div>
+        </div>
       )}
     </div>
   )
