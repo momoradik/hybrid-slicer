@@ -99,26 +99,21 @@ try {
 } finally { Pop-Location }
 Write-Host "      OK" -ForegroundColor Green
 
-# ── 4. Publish self-contained builds ───────────────────────────────────────
+# ── 4. Publish framework-dependent build ───────────────────────────────────
+# Framework-dependent = ~15-20 MB instead of ~110 MB (no bundled .NET runtime).
+# Users need .NET 8 Desktop Runtime installed — the installer handles this.
 Write-Host ""
-Write-Host "[4/7] Publishing self-contained builds..." -ForegroundColor Cyan
+Write-Host "[4/7] Publishing framework-dependent build..." -ForegroundColor Cyan
 
-$PublishX64 = "$PublishDir\x64"
-$PublishX86 = "$PublishDir\x86"
+$PublishOut = "$PublishDir\app"
 
-# x64
-Write-Host "      x64..." -ForegroundColor DarkGray
 dotnet publish "$Root\src\HybridSlicer.Api\HybridSlicer.Api.csproj" `
-    -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o "$PublishX64" -v q
-dotnet publish "$Root\src\HybridSlicer.Launcher\HybridSlicer.Launcher.csproj" `
-    -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o "$PublishX64" -v q
+    -c Release --self-contained false -p:PublishSingleFile=false -o "$PublishOut" -v q
+if ($LASTEXITCODE -ne 0) { throw "API publish failed" }
 
-# x86
-Write-Host "      x86..." -ForegroundColor DarkGray
-dotnet publish "$Root\src\HybridSlicer.Api\HybridSlicer.Api.csproj" `
-    -c Release -r win-x86 --self-contained true -p:PublishSingleFile=false -o "$PublishX86" -v q
 dotnet publish "$Root\src\HybridSlicer.Launcher\HybridSlicer.Launcher.csproj" `
-    -c Release -r win-x86 --self-contained true -p:PublishSingleFile=false -o "$PublishX86" -v q
+    -c Release --self-contained false -p:PublishSingleFile=false -o "$PublishOut" -v q
+if ($LASTEXITCODE -ne 0) { throw "Launcher publish failed" }
 
 Write-Host "      OK" -ForegroundColor Green
 

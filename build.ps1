@@ -138,39 +138,20 @@ if ($started) {
     exit 1
 }
 
-# Optional: publish self-contained + compile Inno Setup installer
+# Optional: publish framework-dependent + compile Inno Setup installer
 Write-Host ""
 Write-Host "-- Installer (optional) ---" -ForegroundColor DarkGray
 
 if (Test-Path $Iscc) {
-    Write-Host "   Inno Setup found. Publishing self-contained builds..." -ForegroundColor DarkGray
+    Write-Host "   Inno Setup found. Publishing framework-dependent build..." -ForegroundColor DarkGray
 
-    $PublishX64 = "$PublishDir\x64"
-    $PublishX86 = "$PublishDir\x86"
+    $PublishApp = "$PublishDir\app"
 
-    # x64 build
-    Write-Host "   Publishing x64..." -ForegroundColor DarkGray
     dotnet publish "$Root\src\HybridSlicer.Api\HybridSlicer.Api.csproj" `
-        -c Release -r win-x64 --self-contained true `
-        -p:PublishSingleFile=false `
-        -o "$PublishX64" -v q
-    if ($LASTEXITCODE -ne 0) { Write-Host "   API x64 publish failed." -ForegroundColor Yellow }
+        -c Release --self-contained false -p:PublishSingleFile=false -o "$PublishApp" -v q
+    if ($LASTEXITCODE -ne 0) { Write-Host "   API publish failed." -ForegroundColor Yellow }
     dotnet publish "$Root\src\HybridSlicer.Launcher\HybridSlicer.Launcher.csproj" `
-        -c Release -r win-x64 --self-contained true `
-        -p:PublishSingleFile=false `
-        -o "$PublishX64" -v q
-
-    # x86 build
-    Write-Host "   Publishing x86..." -ForegroundColor DarkGray
-    dotnet publish "$Root\src\HybridSlicer.Api\HybridSlicer.Api.csproj" `
-        -c Release -r win-x86 --self-contained true `
-        -p:PublishSingleFile=false `
-        -o "$PublishX86" -v q
-    if ($LASTEXITCODE -ne 0) { Write-Host "   API x86 publish failed." -ForegroundColor Yellow }
-    dotnet publish "$Root\src\HybridSlicer.Launcher\HybridSlicer.Launcher.csproj" `
-        -c Release -r win-x86 --self-contained true `
-        -p:PublishSingleFile=false `
-        -o "$PublishX86" -v q
+        -c Release --self-contained false -p:PublishSingleFile=false -o "$PublishApp" -v q
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "   Compiling installer..." -ForegroundColor DarkGray
