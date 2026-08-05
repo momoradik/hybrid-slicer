@@ -4,7 +4,7 @@
 ; Framework-dependent: requires .NET 8 Desktop Runtime (auto-downloaded if missing)
 
 #define AppName    "HybridSlicer"
-#define AppVersion "1.2.2"
+#define AppVersion "1.2.3"
 #define AppExe     "HybridSlicer.exe"
 #define DotNetVersion "8.0"
 #define DotNetInstallerUrl "https://download.visualstudio.microsoft.com/download/pr/dotnet-runtime-8.0-win-x64.exe"
