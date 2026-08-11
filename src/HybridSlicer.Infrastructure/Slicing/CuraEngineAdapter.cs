@@ -177,14 +177,27 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         sb.Append($" -s min_odd_wall_line_width={minWall}");
 
         sb.Append($" -s wall_line_count={p.WallCount}");
-        sb.Append($" -s top_layers={p.TopBottomLayers}");
-        sb.Append($" -s bottom_layers={p.TopBottomLayers}");
+        sb.Append($" -s top_layers={p.TopLayers}");
+        sb.Append($" -s bottom_layers={p.BottomLayers}");
         sb.Append($" -s speed_print={p.PrintSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_travel={p.TravelSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_infill={p.InfillSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_wall_0={p.WallSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_wall_x={p.InnerWallSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_layer_0={p.FirstLayerSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_topbottom={p.TopBottomSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_travel_layer_0={p.FirstLayerTravelSpeedMmS.ToString("F1", ic)}");
+
+        // Cooling: minimum layer time and minimum speed
+        sb.Append($" -s cool_min_layer_time={p.MinLayerTimeSec.ToString("F1", ic)}");
+        sb.Append($" -s cool_min_speed={p.MinSpeedMmS.ToString("F1", ic)}");
+
+        // Motion control
+        sb.Append($" -s acceleration_enabled={p.AccelerationControlEnabled.ToString().ToLowerInvariant()}");
+        sb.Append($" -s jerk_enabled={p.JerkControlEnabled.ToString().ToLowerInvariant()}");
+
+        // Surface quality
+        sb.Append($" -s skin_monotonic={p.SkinMonotonic.ToString().ToLowerInvariant()}");
 
         // Infill: set both the density percentage AND the resolved line-distance so
         // CuraEngine cannot fall back to a stale formula value from the definition file.
@@ -243,8 +256,8 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         sb.Append($" -s min_odd_wall_line_width={minWall}");
 
         sb.Append($" -s wall_line_count={p.WallCount}");
-        sb.Append($" -s top_layers={p.TopBottomLayers}");
-        sb.Append($" -s bottom_layers={p.TopBottomLayers}");
+        sb.Append($" -s top_layers={p.TopLayers}");
+        sb.Append($" -s bottom_layers={p.BottomLayers}");
 
         // Speeds — CuraEngine 5.x resolves these from extruder context
         sb.Append($" -s speed_print={p.PrintSpeedMmS.ToString("F1", ic)}");
@@ -253,6 +266,22 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         sb.Append($" -s speed_wall_0={p.WallSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_wall_x={p.InnerWallSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_layer_0={p.FirstLayerSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_topbottom={p.TopBottomSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_travel_layer_0={p.FirstLayerTravelSpeedMmS.ToString("F1", ic)}");
+
+        // Cooling
+        sb.Append($" -s cool_min_layer_time={p.MinLayerTimeSec.ToString("F1", ic)}");
+        sb.Append($" -s cool_min_speed={p.MinSpeedMmS.ToString("F1", ic)}");
+
+        // Motion control
+        sb.Append($" -s acceleration_enabled={p.AccelerationControlEnabled.ToString().ToLowerInvariant()}");
+        sb.Append($" -s jerk_enabled={p.JerkControlEnabled.ToString().ToLowerInvariant()}");
+
+        // Surface quality
+        sb.Append($" -s skin_monotonic={p.SkinMonotonic.ToString().ToLowerInvariant()}");
+
+        // Retraction enable
+        sb.Append($" -s retraction_enable={p.RetractionEnabled.ToString().ToLowerInvariant()}");
 
         // Infill
         sb.Append($" -s infill_sparse_density={p.InfillDensityPct.ToString("F4", ic)}");
@@ -271,6 +300,7 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         // Retraction
         sb.Append($" -s retraction_amount={p.RetractLengthMm.ToString("F2", ic)}");
         sb.Append($" -s retraction_speed={p.RetractSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s retraction_min_travel={p.RetractMinTravelMm.ToString("F2", ic)}");
 
         // Support — repeat in extruder context
         sb.Append($" -s support_enable={p.SupportEnabled.ToString().ToLowerInvariant()}");

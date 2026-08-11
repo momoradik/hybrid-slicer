@@ -25,7 +25,8 @@ public sealed record SlicingParameters(
     double LayerHeightMm,
     double LineWidthMm,
     int WallCount,
-    int TopBottomLayers,
+    int TopLayers,
+    int BottomLayers,
 
     // Speeds (mm/s)
     double PrintSpeedMmS,
@@ -33,7 +34,9 @@ public sealed record SlicingParameters(
     double InfillSpeedMmS,
     double WallSpeedMmS,       // speed_wall_0 (outer wall)
     double InnerWallSpeedMmS,  // speed_wall_x (inner wall)
+    double TopBottomSpeedMmS,  // speed_topbottom
     double FirstLayerSpeedMmS,
+    double FirstLayerTravelSpeedMmS, // speed_travel_layer_0
 
     // Infill
     double InfillDensityPct,
@@ -44,8 +47,10 @@ public sealed record SlicingParameters(
     int BedTemperatureDegC,
 
     // Retraction
+    bool RetractionEnabled,
     double RetractLengthMm,
     double RetractSpeedMmS,
+    double RetractMinTravelMm,
 
     // Support
     bool SupportEnabled,
@@ -57,6 +62,16 @@ public sealed record SlicingParameters(
     // Cooling
     bool CoolingEnabled,
     int CoolingFanSpeedPct,
+    double MinLayerTimeSec,
+    double MinSpeedMmS,
+
+    // Motion control
+    // Motion control
+    bool AccelerationControlEnabled,
+    bool JerkControlEnabled,
+
+    // Surface quality
+    bool SkinMonotonic,
 
     // Filament
     double FilamentDiameterMm,

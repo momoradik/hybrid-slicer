@@ -83,20 +83,25 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
                 LayerHeightMm:         profile.LayerHeightMm,
                 LineWidthMm:           profile.LineWidthMm,
                 WallCount:             profile.WallCount,
-                TopBottomLayers:       profile.TopBottomLayers,
+                TopLayers:             profile.TopLayers,
+                BottomLayers:          profile.BottomLayers,
                 PrintSpeedMmS:         profile.PrintSpeedMmS,
                 TravelSpeedMmS:        profile.TravelSpeedMmS,
                 InfillSpeedMmS:        profile.InfillSpeedMmS,
                 WallSpeedMmS:          profile.WallSpeedMmS,
                 InnerWallSpeedMmS:     profile.InnerWallSpeedMmS,
+                TopBottomSpeedMmS:     profile.TopBottomSpeedMmS,
                 FirstLayerSpeedMmS:    profile.FirstLayerSpeedMmS,
+                FirstLayerTravelSpeedMmS: profile.FirstLayerTravelSpeedMmS,
                 InfillDensityPct:      job.InfillDensityPct ?? profile.InfillDensityPct,
                 InfillPattern:         string.IsNullOrWhiteSpace(job.InfillPattern) ? profile.InfillPattern : job.InfillPattern,
                 // Use material temperature when available, fall back to profile defaults
                 PrintTemperatureDegC:  material?.PrintTempMaxDegC > 0 ? material.PrintTempMaxDegC : profile.PrintTemperatureDegC,
                 BedTemperatureDegC:    material?.BedTempMaxDegC > 0 ? material.BedTempMaxDegC : profile.BedTemperatureDegC,
+                RetractionEnabled:     profile.RetractionEnabled,
                 RetractLengthMm:       profile.RetractLengthMm,
                 RetractSpeedMmS:       profile.RetractSpeedMmS,
+                RetractMinTravelMm:    profile.RetractMinTravelMm,
                 SupportEnabled:        job.SupportEnabled,
                 SupportType:           job.SupportType,
                 SupportPlacement:      job.SupportPlacement,
@@ -105,6 +110,11 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
                 AdhesionType:          string.IsNullOrWhiteSpace(job.AdhesionType) ? "none" : job.AdhesionType,
                 CoolingEnabled:        profile.CoolingEnabled,
                 CoolingFanSpeedPct:    profile.CoolingFanSpeedPct,
+                MinLayerTimeSec:       profile.MinLayerTimeSec,
+                MinSpeedMmS:           profile.MinSpeedMmS,
+                AccelerationControlEnabled: profile.AccelerationControlEnabled,
+                JerkControlEnabled:    profile.JerkControlEnabled,
+                SkinMonotonic:         profile.SkinMonotonic,
                 FilamentDiameterMm:    profile.PelletModeEnabled
                                            ? profile.VirtualFilamentDiameterMm
                                            : profile.FilamentDiameterMm,
@@ -125,6 +135,7 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
             await _multiExtruder.ProcessAsync(result.GCodeFilePath, machine, enabledBlocks, ct);
 
             await ReplaceStartupGCodeAsync(result.GCodeFilePath, job.GcodeHoming, job.GcodeLevelling, parameters, ct);
+            await InjectProgressMetadataAsync(result.GCodeFilePath, ct);
             await InjectCustomGCodeAsync(result.GCodeFilePath, ct);
 
             // Final step: translate from bed-centre coordinates to real machine coordinates
@@ -201,6 +212,64 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
         // Append everything from ;LAYER:0 onward
         for (var i = layerStart; i < lines.Length; i++)
             sb.AppendLine(lines[i]);
+
+        await File.WriteAllTextAsync(gcodePath, sb.ToString(), ct);
+    }
+
+    /// <summary>
+    /// Injects M73 progress commands at each layer change so firmware (Duet/RepRap,
+    /// Marlin, Klipper) can display accurate remaining time and percentage.
+    ///
+    /// CuraEngine writes ";TIME_ELAPSED:&lt;seconds&gt;" after each layer and ";TIME:&lt;total&gt;"
+    /// in the header. This method reads those values and inserts:
+    ///   M73 P&lt;percent&gt; R&lt;remaining_minutes&gt;
+    /// immediately after each ;LAYER: marker.
+    /// </summary>
+    private async Task InjectProgressMetadataAsync(string gcodePath, CancellationToken ct)
+    {
+        var lines = await File.ReadAllLinesAsync(gcodePath, ct);
+
+        // First pass: find total time from header
+        double totalTimeSec = 0;
+        int layerCount = 0;
+        foreach (var line in lines)
+        {
+            var t = line.TrimStart();
+            if (t.StartsWith(";TIME:", StringComparison.OrdinalIgnoreCase) &&
+                !t.StartsWith(";TIME_ELAPSED:", StringComparison.OrdinalIgnoreCase))
+            {
+                double.TryParse(t[6..], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out totalTimeSec);
+            }
+            else if (t.StartsWith(";LAYER_COUNT:", StringComparison.OrdinalIgnoreCase))
+            {
+                int.TryParse(t[13..], out layerCount);
+            }
+        }
+
+        if (totalTimeSec <= 0 || layerCount <= 0) return; // no timing data, skip
+
+        // Second pass: inject M73 after each ;LAYER: line
+        var sb = new StringBuilder();
+        foreach (var line in lines)
+        {
+            sb.AppendLine(line);
+            var t = line.TrimStart();
+
+            if (t.StartsWith(";TIME_ELAPSED:", StringComparison.OrdinalIgnoreCase))
+            {
+                if (double.TryParse(t[14..], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var elapsed))
+                {
+                    var pct = Math.Min(100, (int)Math.Round(elapsed / totalTimeSec * 100));
+                    var remainMin = Math.Max(0, (int)Math.Ceiling((totalTimeSec - elapsed) / 60.0));
+                    sb.AppendLine($"M73 P{pct} R{remainMin}");
+                }
+            }
+        }
+
+        // Also inject M73 P100 R0 at the very end
+        sb.AppendLine("M73 P100 R0");
 
         await File.WriteAllTextAsync(gcodePath, sb.ToString(), ct);
     }

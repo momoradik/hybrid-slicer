@@ -90,6 +90,18 @@ try
                 "ALTER TABLE PrintJobs ADD COLUMN AdhesionType TEXT NOT NULL DEFAULT 'none'",
                 "ALTER TABLE PrintJobs ADD COLUMN GcodeHoming INTEGER NOT NULL DEFAULT 1",
                 "ALTER TABLE PrintJobs ADD COLUMN GcodeLevelling INTEGER NOT NULL DEFAULT 0",
+                // PrintProfile new columns
+                "ALTER TABLE PrintProfiles ADD COLUMN TopBottomSpeedMmS REAL NOT NULL DEFAULT 30.0",
+                "ALTER TABLE PrintProfiles ADD COLUMN RetractMinTravelMm REAL NOT NULL DEFAULT 1.5",
+                "ALTER TABLE PrintProfiles ADD COLUMN MinLayerTimeSec REAL NOT NULL DEFAULT 5.0",
+                "ALTER TABLE PrintProfiles ADD COLUMN MinSpeedMmS REAL NOT NULL DEFAULT 10.0",
+                "ALTER TABLE PrintProfiles ADD COLUMN AccelerationControlEnabled INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE PrintProfiles ADD COLUMN JerkControlEnabled INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE PrintProfiles ADD COLUMN TopLayers INTEGER NOT NULL DEFAULT 4",
+                "ALTER TABLE PrintProfiles ADD COLUMN BottomLayers INTEGER NOT NULL DEFAULT 4",
+                "ALTER TABLE PrintProfiles ADD COLUMN RetractionEnabled INTEGER NOT NULL DEFAULT 1",
+                "ALTER TABLE PrintProfiles ADD COLUMN SkinMonotonic INTEGER NOT NULL DEFAULT 1",
+                "ALTER TABLE PrintProfiles ADD COLUMN FirstLayerTravelSpeedMmS REAL NOT NULL DEFAULT 50.0",
             ];
             foreach (var sql in alters)
                 try { await db.Database.ExecuteSqlRawAsync(sql); } catch { /* column already exists */ }

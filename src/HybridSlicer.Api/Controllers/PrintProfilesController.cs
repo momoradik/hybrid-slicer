@@ -36,6 +36,13 @@ public sealed class PrintProfilesController : ControllerBase
             .WithFlow(req.MaterialFlowPct)
             .WithNozzleDiameter(req.NozzleDiameterMm)
             .WithInnerWallSpeed(req.InnerWallSpeedMmS)
+            .WithTopBottomSpeed(req.TopBottomSpeedMmS)
+            .WithRetraction(req.RetractionEnabled, req.RetractLengthMm, req.RetractSpeedMmS, req.RetractMinTravelMm)
+            .WithTopBottomLayers(req.TopLayers, req.BottomLayers)
+            .WithCoolingLimits(req.MinLayerTimeSec, req.MinSpeedMmS)
+            .WithMotionControl(req.AccelerationControlEnabled, req.JerkControlEnabled)
+            .WithSkinMonotonic(req.SkinMonotonic)
+            .WithFirstLayerTravelSpeed(req.FirstLayerTravelSpeedMmS)
             .WithPelletMode(req.PelletModeEnabled, req.VirtualFilamentDiameterMm);
 
         await _repo.AddAsync(profile, ct);
@@ -59,6 +66,13 @@ public sealed class PrintProfilesController : ControllerBase
             .WithFlow(req.MaterialFlowPct)
             .WithNozzleDiameter(req.NozzleDiameterMm)
             .WithInnerWallSpeed(req.InnerWallSpeedMmS)
+            .WithTopBottomSpeed(req.TopBottomSpeedMmS)
+            .WithRetraction(req.RetractionEnabled, req.RetractLengthMm, req.RetractSpeedMmS, req.RetractMinTravelMm)
+            .WithTopBottomLayers(req.TopLayers, req.BottomLayers)
+            .WithCoolingLimits(req.MinLayerTimeSec, req.MinSpeedMmS)
+            .WithMotionControl(req.AccelerationControlEnabled, req.JerkControlEnabled)
+            .WithSkinMonotonic(req.SkinMonotonic)
+            .WithFirstLayerTravelSpeed(req.FirstLayerTravelSpeedMmS)
             .WithPelletMode(req.PelletModeEnabled, req.VirtualFilamentDiameterMm);
 
         await _repo.UpdateAsync(profile, ct);
@@ -82,6 +96,8 @@ public record CreatePrintProfileRequest(
     double LineWidthMm            = 0.4,
     int    WallCount              = 3,
     int    TopBottomLayers        = 4,
+    int    TopLayers              = 4,
+    int    BottomLayers           = 4,
     double PrintSpeedMmS          = 50,
     double TravelSpeedMmS         = 150,
     double InfillSpeedMmS         = 70,
@@ -91,6 +107,7 @@ public record CreatePrintProfileRequest(
     string InfillPattern          = "grid",
     int    PrintTemperatureDegC   = 210,
     int    BedTemperatureDegC     = 60,
+    bool   RetractionEnabled       = true,
     double RetractLengthMm        = 5,
     double RetractSpeedMmS        = 45,
     bool   SupportEnabled         = false,
@@ -102,5 +119,13 @@ public record CreatePrintProfileRequest(
     double MaterialFlowPct        = 100.0,
     double NozzleDiameterMm             = 0.0,
     double InnerWallSpeedMmS            = 60.0,
+    double TopBottomSpeedMmS            = 30.0,
+    double RetractMinTravelMm           = 1.5,
+    double MinLayerTimeSec              = 5.0,
+    double MinSpeedMmS                  = 10.0,
+    bool   AccelerationControlEnabled   = false,
+    bool   JerkControlEnabled           = false,
+    bool   SkinMonotonic                = true,
+    double FirstLayerTravelSpeedMmS     = 50.0,
     bool   PelletModeEnabled            = false,
     double VirtualFilamentDiameterMm    = 1.0);

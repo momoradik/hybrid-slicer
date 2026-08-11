@@ -28,6 +28,7 @@ function curaDefaults(nozzle: number, printSpeed: number) {
     wallSpeedMmS:      +(printSpeed * 0.5).toFixed(1),
     innerWallSpeedMmS: +printSpeed.toFixed(1),
     infillSpeedMmS:    +(printSpeed * 1.5).toFixed(1),
+    topBottomSpeedMmS: +(printSpeed * 0.5).toFixed(1),
     firstLayerSpeedMmS: 20,
     materialFlowPct:   100,
     coolingFanSpeedPct: 100,
@@ -47,15 +48,27 @@ const EMPTY: DraftProfile = {
   wallSpeedMmS: 30,
   innerWallSpeedMmS: 60,
   infillSpeedMmS: 90,
+  topBottomSpeedMmS: 30,
   firstLayerSpeedMmS: 20,
+  firstLayerTravelSpeedMmS: 50,
   wallCount: 3,
+  topLayers: 4,
+  bottomLayers: 4,
   infillDensityPct: 20,
   infillPattern: 'grid',
   printTemperatureDegC: 210,
   bedTemperatureDegC: 60,
+  retractionEnabled: true,
   retractLengthMm: 5,
+  retractSpeedMmS: 45,
+  retractMinTravelMm: 1.5,
   coolingEnabled: true,
   coolingFanSpeedPct: 100,
+  minLayerTimeSec: 5,
+  minSpeedMmS: 10,
+  accelerationControlEnabled: false,
+  jerkControlEnabled: false,
+  skinMonotonic: true,
   supportEnabled: false,
   pelletModeEnabled: false,
   virtualFilamentDiameterMm: 1.0,
@@ -292,15 +305,15 @@ export default function PrintSettings() {
               {/* ── ADVANCED ── */}
               {advanced && (
                 <>
-                  <Section title="Advanced Speed Settings"
+                  <Section title="Speed Settings"
                     subtitle="Fine-tune individual move categories — wired to separate Cura speed_* keys">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <F label="Travel Speed (mm/s)" hint="speed_travel">
                         <WithAuto onAuto={() => applyAuto('travelSpeedMmS')}>
                           <NumIn value={draft.travelSpeedMmS ?? 150} min={1} max={500}
                             onChange={v => set('travelSpeedMmS', v)} />
                         </WithAuto>
-                        <AutoHint>150 mm/s (Cura default)</AutoHint>
+                        <AutoHint>150 mm/s</AutoHint>
                       </F>
                       <F label="Outer Wall Speed (mm/s)" hint="speed_wall_0">
                         <WithAuto onAuto={() => applyAuto('wallSpeedMmS')}>
@@ -314,7 +327,7 @@ export default function PrintSettings() {
                           <NumIn value={draft.innerWallSpeedMmS ?? 60} min={1} max={500}
                             onChange={v => set('innerWallSpeedMmS', v)} />
                         </WithAuto>
-                        <AutoHint>{(draft.printSpeedMmS ?? 60).toFixed(0)} mm/s (= print speed)</AutoHint>
+                        <AutoHint>{(draft.printSpeedMmS ?? 60).toFixed(0)} mm/s (= print)</AutoHint>
                       </F>
                       <F label="Infill Speed (mm/s)" hint="speed_infill">
                         <WithAuto onAuto={() => applyAuto('infillSpeedMmS')}>
@@ -323,11 +336,29 @@ export default function PrintSettings() {
                         </WithAuto>
                         <AutoHint>{((draft.printSpeedMmS ?? 60) * 1.5).toFixed(0)} mm/s (print × 1.5)</AutoHint>
                       </F>
+                      <F label="Top/Bottom Speed (mm/s)" hint="speed_topbottom">
+                        <WithAuto onAuto={() => applyAuto('topBottomSpeedMmS')}>
+                          <NumIn value={draft.topBottomSpeedMmS ?? 30} min={1} max={500}
+                            onChange={v => set('topBottomSpeedMmS', v)} />
+                        </WithAuto>
+                        <AutoHint>{((draft.printSpeedMmS ?? 60) * 0.5).toFixed(0)} mm/s (print × 0.5)</AutoHint>
+                      </F>
+                      <F label="Initial Layer Speed (mm/s)" hint="speed_layer_0">
+                        <WithAuto onAuto={() => applyAuto('firstLayerSpeedMmS')}>
+                          <NumIn value={draft.firstLayerSpeedMmS ?? 20} min={1} max={100}
+                            onChange={v => set('firstLayerSpeedMmS', v)} />
+                        </WithAuto>
+                        <AutoHint>20 mm/s</AutoHint>
+                      </F>
+                      <F label="Init. Layer Travel (mm/s)" hint="speed_travel_layer_0">
+                        <NumIn value={draft.firstLayerTravelSpeedMmS ?? 50} min={1} max={500}
+                          onChange={v => set('firstLayerTravelSpeedMmS', v)} />
+                      </F>
                     </div>
                   </Section>
 
                   <Section title="Structure">
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-4 gap-4">
                       <F label="Wall Count">
                         <NumIn value={draft.wallCount ?? 3} min={1} max={20}
                           onChange={v => set('wallCount', v)} />
@@ -339,35 +370,88 @@ export default function PrintSettings() {
                         </WithAuto>
                         <AutoHint>{(draft.nozzleDiameterMm ?? 0.4).toFixed(2)} mm (= nozzle)</AutoHint>
                       </F>
-                      <F label="First Layer Speed (mm/s)" hint="speed_layer_0">
-                        <WithAuto onAuto={() => applyAuto('firstLayerSpeedMmS')}>
-                          <NumIn value={draft.firstLayerSpeedMmS ?? 20} min={1} max={100}
-                            onChange={v => set('firstLayerSpeedMmS', v)} />
-                        </WithAuto>
-                        <AutoHint>20 mm/s (Cura default)</AutoHint>
+                      <F label="Top Layers" hint="top_layers">
+                        <NumIn value={draft.topLayers ?? 4} min={0} max={20}
+                          onChange={v => set('topLayers', v)} />
+                      </F>
+                      <F label="Bottom Layers" hint="bottom_layers">
+                        <NumIn value={draft.bottomLayers ?? 4} min={0} max={20}
+                          onChange={v => set('bottomLayers', v)} />
                       </F>
                     </div>
                   </Section>
 
                   <Section title="Temperature & Cooling">
-                    <div className="grid grid-cols-2 gap-4">
-                      <F label="Print Temperature (°C)">
+                    <div className="grid grid-cols-3 gap-4">
+                      <F label="Print Temp (°C)">
                         <NumIn value={draft.printTemperatureDegC ?? 210} min={150} max={350}
                           onChange={v => set('printTemperatureDegC', v)} />
                       </F>
-                      <F label="Bed Temperature (°C)">
+                      <F label="Bed Temp (°C)">
                         <NumIn value={draft.bedTemperatureDegC ?? 60} min={0} max={150}
                           onChange={v => set('bedTemperatureDegC', v)} />
                       </F>
-                      <F label="Cooling Fan Speed (%)">
+                      <F label="Fan Speed (%)">
                         <WithAuto onAuto={() => applyAuto('coolingFanSpeedPct')}>
                           <NumIn value={draft.coolingFanSpeedPct ?? 100} min={0} max={100}
                             onChange={v => set('coolingFanSpeedPct', v)} />
                         </WithAuto>
                       </F>
-                      <F label="Retract Length (mm)">
-                        <NumIn value={draft.retractLengthMm ?? 5} min={0} max={20} step={0.5}
-                          onChange={v => set('retractLengthMm', v)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <F label="Minimum Layer Time (s)" hint="cool_min_layer_time">
+                        <NumIn value={draft.minLayerTimeSec ?? 5} min={0} max={120} step={1}
+                          onChange={v => set('minLayerTimeSec', v)} />
+                      </F>
+                      <F label="Minimum Speed (mm/s)" hint="cool_min_speed">
+                        <NumIn value={draft.minSpeedMmS ?? 10} min={0} max={100} step={1}
+                          onChange={v => set('minSpeedMmS', v)} />
+                      </F>
+                    </div>
+                  </Section>
+
+                  <Section title="Retraction" subtitle="Controls filament pull-back during travel moves">
+                    <div className="mb-3">
+                      <F label="Retraction" hint="retraction_enable">
+                        <Toggle checked={draft.retractionEnabled !== false}
+                          onChange={v => set('retractionEnabled', v)}
+                          labelOn="Enabled" labelOff="Disabled" />
+                      </F>
+                    </div>
+                    {draft.retractionEnabled !== false && (
+                      <div className="grid grid-cols-3 gap-4">
+                        <F label="Distance (mm)" hint="retraction_amount">
+                          <NumIn value={draft.retractLengthMm ?? 5} min={0} max={20} step={0.1}
+                            onChange={v => set('retractLengthMm', v)} />
+                        </F>
+                        <F label="Speed (mm/s)" hint="retraction_speed">
+                          <NumIn value={draft.retractSpeedMmS ?? 45} min={1} max={100} step={1}
+                            onChange={v => set('retractSpeedMmS', v)} />
+                        </F>
+                        <F label="Min Travel (mm)" hint="retraction_min_travel">
+                          <NumIn value={draft.retractMinTravelMm ?? 1.5} min={0} max={20} step={0.5}
+                            onChange={v => set('retractMinTravelMm', v)} />
+                        </F>
+                      </div>
+                    )}
+                  </Section>
+
+                  <Section title="Motion & Surface" subtitle="Firmware motion limits and surface quality">
+                    <div className="grid grid-cols-3 gap-4">
+                      <F label="Acceleration Control" hint="acceleration_enabled">
+                        <Toggle checked={!!draft.accelerationControlEnabled}
+                          onChange={v => set('accelerationControlEnabled', v)}
+                          labelOn="Enabled" labelOff="Disabled" />
+                      </F>
+                      <F label="Jerk Control" hint="jerk_enabled">
+                        <Toggle checked={!!draft.jerkControlEnabled}
+                          onChange={v => set('jerkControlEnabled', v)}
+                          labelOn="Enabled" labelOff="Disabled" />
+                      </F>
+                      <F label="Monotonic Top/Bottom" hint="skin_monotonic">
+                        <Toggle checked={draft.skinMonotonic !== false}
+                          onChange={v => set('skinMonotonic', v)}
+                          labelOn="Enabled" labelOff="Disabled" />
                       </F>
                     </div>
                   </Section>
@@ -482,6 +566,23 @@ function WithAuto({ children, onAuto }: { children: React.ReactNode; onAuto: () 
 
 function AutoHint({ children }: { children: React.ReactNode }) {
   return <p className="text-[10px] text-gray-600 mt-0.5">Auto: {children}</p>
+}
+
+function Toggle({ checked, onChange, labelOn = 'ON', labelOff = 'OFF' }: {
+  checked: boolean; onChange: (v: boolean) => void; labelOn?: string; labelOff?: string
+}) {
+  return (
+    <label className="flex items-center gap-3 cursor-pointer select-none w-fit">
+      <input type="checkbox" className="sr-only" checked={checked}
+        onChange={e => onChange(e.target.checked)} />
+      <div className={`relative w-11 h-6 rounded-full transition-colors ${checked ? 'bg-blue-600' : 'bg-gray-700'}`}>
+        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+      </div>
+      <span className={`text-sm ${checked ? 'text-blue-300' : 'text-gray-500'}`}>
+        {checked ? labelOn : labelOff}
+      </span>
+    </label>
+  )
 }
 
 function NumIn({ value, min, max, step = 1, onChange }: {

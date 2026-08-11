@@ -14,7 +14,6 @@ const allNavItems = [
   { to: '/hybrid-preview',    label: 'Hybrid Preview', icon: '🎬', devOnly: false },
   { to: '/custom-gcode',      label: 'G-code Customisation', icon: '📝', devOnly: false },
   { to: '/calibration',       label: 'Calibration',    icon: '📐', devOnly: false },
-  { to: '/pellet-calibration', label: 'Pellet Calib.', icon: '🟡', devOnly: false },
   { to: '/settings/branding', label: 'Branding',       icon: '🎨', devOnly: true  },
 ]
 

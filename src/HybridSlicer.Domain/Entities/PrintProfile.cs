@@ -16,6 +16,8 @@ public class PrintProfile
     public double LineWidthMm { get; private set; } = 0.4;
     public int WallCount { get; private set; } = 3;
     public int TopBottomLayers { get; private set; } = 4;
+    public int TopLayers { get; private set; } = 4;
+    public int BottomLayers { get; private set; } = 4;
 
     // Speed (mm/s)
     public double PrintSpeedMmS { get; private set; } = 50;
@@ -23,6 +25,7 @@ public class PrintProfile
     public double InfillSpeedMmS { get; private set; } = 70;
     public double WallSpeedMmS { get; private set; } = 30;
     public double FirstLayerSpeedMmS { get; private set; } = 20;
+    public double FirstLayerTravelSpeedMmS { get; private set; } = 50;
 
     // Infill
     public double InfillDensityPct { get; private set; } = 20;
@@ -33,6 +36,7 @@ public class PrintProfile
     public int BedTemperatureDegC { get; private set; } = 60;
 
     // Retraction
+    public bool RetractionEnabled { get; private set; } = true;
     public double RetractLengthMm { get; private set; } = 5;
     public double RetractSpeedMmS { get; private set; } = 45;
 
@@ -56,6 +60,21 @@ public class PrintProfile
 
     // Advanced speeds (mm/s)
     public double InnerWallSpeedMmS { get; private set; } = 60;
+    public double TopBottomSpeedMmS { get; private set; } = 30;
+
+    // Retraction (advanced)
+    public double RetractMinTravelMm { get; private set; } = 1.5;
+
+    // Cooling (advanced)
+    public double MinLayerTimeSec { get; private set; } = 5;
+    public double MinSpeedMmS { get; private set; } = 10;
+
+    // Motion control
+    public bool AccelerationControlEnabled { get; private set; }
+    public bool JerkControlEnabled { get; private set; }
+
+    // Surface quality
+    public bool SkinMonotonic { get; private set; } = true;
 
     // Skirt / brim
     public bool BrimEnabled { get; private set; }
@@ -150,6 +169,57 @@ public class PrintProfile
         if (mmS < 0 || mmS > 1000)
             throw new DomainException("INVALID_SPEED", "Speed must be 0–1000 mm/s.");
         InnerWallSpeedMmS = mmS;
+        return Touch();
+    }
+
+    public PrintProfile WithTopBottomSpeed(double mmS)
+    {
+        if (mmS < 0 || mmS > 1000)
+            throw new DomainException("INVALID_SPEED", "Speed must be 0–1000 mm/s.");
+        TopBottomSpeedMmS = mmS;
+        return Touch();
+    }
+
+    public PrintProfile WithRetraction(bool enabled, double lengthMm, double speedMmS, double minTravelMm)
+    {
+        RetractionEnabled = enabled;
+        RetractLengthMm = lengthMm;
+        RetractSpeedMmS = speedMmS;
+        RetractMinTravelMm = minTravelMm;
+        return Touch();
+    }
+
+    public PrintProfile WithTopBottomLayers(int top, int bottom)
+    {
+        TopLayers = top;
+        BottomLayers = bottom;
+        TopBottomLayers = Math.Max(top, bottom); // keep legacy field in sync
+        return Touch();
+    }
+
+    public PrintProfile WithSkinMonotonic(bool enabled)
+    {
+        SkinMonotonic = enabled;
+        return Touch();
+    }
+
+    public PrintProfile WithFirstLayerTravelSpeed(double mmS)
+    {
+        FirstLayerTravelSpeedMmS = mmS;
+        return Touch();
+    }
+
+    public PrintProfile WithCoolingLimits(double minLayerTimeSec, double minSpeedMmS)
+    {
+        MinLayerTimeSec = minLayerTimeSec;
+        MinSpeedMmS = minSpeedMmS;
+        return Touch();
+    }
+
+    public PrintProfile WithMotionControl(bool accelerationEnabled, bool jerkEnabled)
+    {
+        AccelerationControlEnabled = accelerationEnabled;
+        JerkControlEnabled = jerkEnabled;
         return Touch();
     }
 

@@ -93,19 +93,33 @@ export interface PrintProfile {
   wallSpeedMmS: number            // speed_wall_0 (outer wall)
   innerWallSpeedMmS: number       // speed_wall_x (inner wall)
   infillSpeedMmS: number          // speed_infill
+  topBottomSpeedMmS: number       // speed_topbottom
   firstLayerSpeedMmS: number      // speed_layer_0
+  firstLayerTravelSpeedMmS: number // speed_travel_layer_0
   // Structure
   wallCount: number
+  topLayers: number               // top_layers
+  bottomLayers: number            // bottom_layers
   infillDensityPct: number
   infillPattern: string
   // Temperature (°C)
   printTemperatureDegC: number
   bedTemperatureDegC: number
   // Retraction
+  retractionEnabled: boolean         // retraction_enable
   retractLengthMm: number
+  retractSpeedMmS: number            // retraction_speed
+  retractMinTravelMm: number         // retraction_min_travel
   // Cooling
   coolingEnabled: boolean
   coolingFanSpeedPct: number
+  minLayerTimeSec: number            // cool_min_layer_time
+  minSpeedMmS: number                // cool_min_speed
+  // Motion control
+  accelerationControlEnabled: boolean // acceleration_enabled
+  jerkControlEnabled: boolean         // jerk_enabled
+  // Surface quality
+  skinMonotonic: boolean             // skin_monotonic
   // Support
   supportEnabled: boolean
   pelletModeEnabled: boolean
