@@ -99,20 +99,19 @@ try {
 } finally { Pop-Location }
 Write-Host "      OK" -ForegroundColor Green
 
-# ── 4. Publish framework-dependent build ───────────────────────────────────
-# Framework-dependent = ~15-20 MB instead of ~110 MB (no bundled .NET runtime).
-# Users need .NET 8 Desktop Runtime installed — the installer handles this.
+# ── 4. Publish self-contained build ────────────────────────────────────────
+# Self-contained bundles .NET runtime — users never need to install .NET.
 Write-Host ""
-Write-Host "[4/7] Publishing framework-dependent build..." -ForegroundColor Cyan
+Write-Host "[4/7] Publishing self-contained build..." -ForegroundColor Cyan
 
 $PublishOut = "$PublishDir\app"
 
 dotnet publish "$Root\src\HybridSlicer.Api\HybridSlicer.Api.csproj" `
-    -c Release --self-contained false -p:PublishSingleFile=false -o "$PublishOut" -v q
+    -c Release --self-contained true -r win-x64 -p:PublishSingleFile=false -p:PublishTrimmed=false -o "$PublishOut" -v q
 if ($LASTEXITCODE -ne 0) { throw "API publish failed" }
 
 dotnet publish "$Root\src\HybridSlicer.Launcher\HybridSlicer.Launcher.csproj" `
-    -c Release --self-contained false -p:PublishSingleFile=false -o "$PublishOut" -v q
+    -c Release --self-contained true -r win-x64 -p:PublishSingleFile=false -p:PublishTrimmed=false -o "$PublishOut" -v q
 if ($LASTEXITCODE -ne 0) { throw "Launcher publish failed" }
 
 Write-Host "      OK" -ForegroundColor Green

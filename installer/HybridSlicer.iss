@@ -1,10 +1,10 @@
 ; HybridSlicer - Inno Setup installer script
 ; Build with: ISCC.exe installer\HybridSlicer.iss
 ; Output:     dist\HybridSlicer-Setup.exe
-; Framework-dependent: .NET 8 Desktop Runtime auto-installed if missing
+; Self-contained: .NET runtime is bundled, no external install needed
 
 #define AppName    "HybridSlicer"
-#define AppVersion "1.2.3"
+#define AppVersion "1.3.0"
 #define AppExe     "HybridSlicer.exe"
 
 [Setup]
@@ -52,75 +52,6 @@ Filename: "{app}\{#AppExe}"; Flags: nowait skipifdoesntexist; Check: IsSilentIns
 function IsSilentInstall(): Boolean;
 begin
   Result := WizardSilent();
-end;
-
-function IsDotNet8Installed(): Boolean;
-var
-  ResultCode: Integer;
-  Output: AnsiString;
-  TmpFile: String;
-begin
-  Result := False;
-  TmpFile := ExpandConstant('{tmp}\dotnet_check.txt');
-  // Run dotnet --list-runtimes and capture output
-  if Exec('cmd.exe', '/C dotnet --list-runtimes > "' + TmpFile + '" 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-  begin
-    if (ResultCode = 0) and LoadStringFromFile(TmpFile, Output) then
-    begin
-      // Check for any 8.x runtime (desktop or aspnetcore)
-      if (Pos('Microsoft.NETCore.App 8.', String(Output)) > 0) or
-         (Pos('Microsoft.AspNetCore.App 8.', String(Output)) > 0) then
-        Result := True;
-    end;
-  end;
-  DeleteFile(TmpFile);
-end;
-
-procedure InstallDotNet8();
-var
-  ResultCode: Integer;
-  DotNetUrl: String;
-  InstallerPath: String;
-begin
-  // Download .NET 8 Desktop Runtime (windowsdesktop runtime includes ASP.NET Core)
-  if IsWin64 then
-    DotNetUrl := 'https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0/latest/windowsdesktop-runtime-win-x64.exe'
-  else
-    DotNetUrl := 'https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0/latest/windowsdesktop-runtime-win-x86.exe';
-
-  InstallerPath := ExpandConstant('{tmp}\dotnet8-runtime.exe');
-
-  // Download silently using PowerShell
-  WizardForm.StatusLabel.Caption := 'Downloading .NET 8 Runtime...';
-  WizardForm.StatusLabel.Update;
-
-  if not Exec('powershell.exe',
-    '-NoProfile -ExecutionPolicy Bypass -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile(''' + DotNetUrl + ''', ''' + InstallerPath + ''') } catch { exit 1 }"',
-    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
-  begin
-    // Fallback: try with curl
-    Exec('curl.exe', '-L -o "' + InstallerPath + '" "' + DotNetUrl + '"',
-      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  end;
-
-  // Install silently
-  if FileExists(InstallerPath) then
-  begin
-    WizardForm.StatusLabel.Caption := 'Installing .NET 8 Runtime...';
-    WizardForm.StatusLabel.Update;
-    Exec(InstallerPath, '/install /quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  end;
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep = ssInstall then
-  begin
-    if not IsDotNet8Installed() then
-    begin
-      InstallDotNet8();
-    end;
-  end;
 end;
 
 function InitializeSetup(): Boolean;
