@@ -90,6 +90,8 @@ try
                 "ALTER TABLE PrintJobs ADD COLUMN AdhesionType TEXT NOT NULL DEFAULT 'none'",
                 "ALTER TABLE PrintJobs ADD COLUMN GcodeHoming INTEGER NOT NULL DEFAULT 1",
                 "ALTER TABLE PrintJobs ADD COLUMN GcodeLevelling INTEGER NOT NULL DEFAULT 0",
+                // Existing jobs keep the previous behaviour: blocks are applied.
+                "ALTER TABLE PrintJobs ADD COLUMN ApplyCustomGCodeBlocks INTEGER NOT NULL DEFAULT 1",
                 // PrintProfile new columns
                 "ALTER TABLE PrintProfiles ADD COLUMN TopBottomSpeedMmS REAL NOT NULL DEFAULT 30.0",
                 "ALTER TABLE PrintProfiles ADD COLUMN RetractMinTravelMm REAL NOT NULL DEFAULT 1.5",
