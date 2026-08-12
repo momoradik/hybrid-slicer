@@ -67,7 +67,7 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
 
             // Flush ALL print layers from (printStart+1) through (layer) inclusive.
             // Layer N is printed BEFORE the CNC operation that machines its top surface.
-            var printFrag = ConcatLayers(segments, printStart + 1, layer);
+            var printFrag = ConcatLayers(segments, printStart + 1, layer, request.EnabledCustomBlocks);
             if (!string.IsNullOrWhiteSpace(printFrag))
             {
                 output.AppendLine($"; --- Print layers {printStart + 1}–{layer} ---");
@@ -120,7 +120,8 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
         // Flush any remaining print layers after the last machining event
         if (printStart < request.TotalPrintLayers)
         {
-            var lastFrag = ConcatLayers(segments, printStart + 1, request.TotalPrintLayers);
+            var lastFrag = ConcatLayers(segments, printStart + 1, request.TotalPrintLayers,
+                request.EnabledCustomBlocks);
             if (!string.IsNullOrWhiteSpace(lastFrag))
             {
                 output.AppendLine($"; --- Print layers {printStart + 1}–{request.TotalPrintLayers} ---");
@@ -191,14 +192,35 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
         return result;
     }
 
-    /// <summary>Concatenates layer G-code fragments from 'from' to 'to' inclusive.</summary>
-    private static string ConcatLayers(Dictionary<int, string> segments, int from, int to)
+    /// <summary>
+    /// Concatenates layer G-code fragments from 'from' to 'to' inclusive, appending
+    /// any layer-interval blocks (<see cref="GCodeTrigger.EveryNLayers"/>) that fire
+    /// on each layer. The block is emitted *after* the layer it fires on, so
+    /// "every 10 layers" means "once layer 10 has finished printing".
+    /// </summary>
+    private static string ConcatLayers(
+        Dictionary<int, string> segments, int from, int to,
+        IReadOnlyList<CustomGCodeBlock>? blocks = null)
     {
+        var periodic = blocks?
+            .Where(b => b.IsEnabled && b.Trigger == GCodeTrigger.EveryNLayers)
+            .OrderBy(b => b.SortOrder)
+            .ToList();
+
         var sb = new StringBuilder();
         for (var l = from; l <= to; l++)
         {
             if (segments.TryGetValue(l, out var frag))
                 sb.Append(frag);
+
+            if (periodic is null || periodic.Count == 0) continue;
+
+            foreach (var block in periodic.Where(b => b.FiresOnLayer(l)))
+            {
+                sb.AppendLine($"; --- Custom block: '{block.Name}' every {block.RepeatEveryNLayers} layers @ layer {l} ---");
+                sb.AppendLine(block.GCodeContent);
+                sb.AppendLine($"; --- End block: '{block.Name}' ---");
+            }
         }
         return sb.ToString();
     }

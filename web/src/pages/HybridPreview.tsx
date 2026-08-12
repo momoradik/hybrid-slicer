@@ -1159,7 +1159,9 @@ export default function HybridPreview() {
   const { data: jobs     = [] } = useQuery({ queryKey: ['jobs'],          queryFn: jobsApi.getAll })
   const { data: profiles = [] } = useQuery({ queryKey: ['printProfiles'], queryFn: printProfilesApi.getAll })
   const { data: machines = [] } = useQuery({ queryKey: ['machines'],      queryFn: machineProfilesApi.getAll })
-  const { data: gCodeBlocks = [] } = useQuery({ queryKey: ['gcode-blocks'], queryFn: customGCodeApi.getAll })
+  // Wrapped: getAll now takes an optional machine filter, so it must not receive
+  // react-query's QueryFunctionContext as its first argument.
+  const { data: gCodeBlocks = [] } = useQuery({ queryKey: ['gcode-blocks'], queryFn: () => customGCodeApi.getAll() })
 
   const [jobId,          setJobId]          = useState(() => _saved.jobId)
   const [simReady,       setSimReady]       = useState(() => _saved.simReady)

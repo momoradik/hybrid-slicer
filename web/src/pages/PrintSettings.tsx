@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { printProfilesApi } from '../api/client'
 import DisabledHint from '../components/DisabledHint'
-import type { PrintProfile } from '../types'
+import InfoTip from '../components/InfoTip'
+import type { PrintProfile, ApiError } from '../types'
 
 // ── Cura-derived "Auto" defaults ────────────────────────────────────────────
 // These replicate Cura's built-in formula defaults so the "Auto" button
@@ -19,19 +20,37 @@ import type { PrintProfile } from '../types'
 //   speed_layer_0   = 20 mm/s           (first layer slower)
 //   material_flow   = 100 %
 
+// Cura's own defaults for the values that aren't derived from anything.
+const CURA_NOZZLE_MM = 0.4
+const CURA_PRINT_SPEED = 60
+
 function curaDefaults(nozzle: number, printSpeed: number) {
   return {
+    nozzleDiameterMm:  CURA_NOZZLE_MM,
     layerHeightMm:     +(nozzle * 0.5).toFixed(2),
     lineWidthMm:       +nozzle.toFixed(2),
-    printSpeedMmS:     printSpeed,
+    // Print speed is a root value, not derived — Auto must restore Cura's default
+    // rather than echo back whatever is already in the box.
+    printSpeedMmS:     CURA_PRINT_SPEED,
     travelSpeedMmS:    150,
     wallSpeedMmS:      +(printSpeed * 0.5).toFixed(1),
     innerWallSpeedMmS: +printSpeed.toFixed(1),
     infillSpeedMmS:    +(printSpeed * 1.5).toFixed(1),
     topBottomSpeedMmS: +(printSpeed * 0.5).toFixed(1),
     firstLayerSpeedMmS: 20,
+    firstLayerTravelSpeedMmS: 50,
     materialFlowPct:   100,
     coolingFanSpeedPct: 100,
+    minLayerTimeSec:   5,
+    minSpeedMmS:       10,
+    // Pellet tuning — CuraEngine's documented defaults
+    pressureAdvanceFactor:         0.05,
+    flowRateCompensationFactorPct: 100,
+    flowRateMaxExtrusionOffsetMm:  0,
+    materialMaxFlowRateMm3S:       16,
+    flowEqualizationRatioPct:      100,
+    initialLayerFlowPct:           100,
+    standbyTemperatureDegC:        150,
   }
 }
 
@@ -72,6 +91,13 @@ const EMPTY: DraftProfile = {
   supportEnabled: false,
   pelletModeEnabled: false,
   virtualFilamentDiameterMm: 1.0,
+  pressureAdvanceFactor: 0.05,
+  flowRateCompensationFactorPct: 100,
+  flowRateMaxExtrusionOffsetMm: 0,
+  materialMaxFlowRateMm3S: 16,
+  flowEqualizationRatioPct: 100,
+  initialLayerFlowPct: 100,
+  standbyTemperatureDegC: 150,
 }
 
 export default function PrintSettings() {
@@ -80,21 +106,30 @@ export default function PrintSettings() {
   const [draft, setDraft]       = useState<DraftProfile | null>(null)
   const [advanced, setAdvanced] = useState(false)
   const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null)
+  const [saveError, setSaveError] = useState<ApiError | null>(null)
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok })
     setTimeout(() => setToast(null), 3000)
   }
 
+  // The API's error envelope is {code, message, field, providedValue, expected}.
+  // Keep the whole thing so the form can name the offending setting.
+  const onSaveError = (e: any) => {
+    const data: ApiError | undefined = e?.response?.data
+    setSaveError(data ?? { code: 'NETWORK', message: e?.message ?? 'Could not reach the server.' })
+    showToast(data?.message ?? 'Save failed', false)
+  }
+
   const createMutation = useMutation({
     mutationFn: (d: DraftProfile) => printProfilesApi.create(d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['printProfiles'] }); setDraft(null); showToast('Profile created') },
-    onError: (e: any) => showToast(e?.response?.data?.title ?? 'Failed to create profile', false),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['printProfiles'] }); setDraft(null); setSaveError(null); showToast('Profile created') },
+    onError: onSaveError,
   })
   const updateMutation = useMutation({
     mutationFn: (d: DraftProfile) => printProfilesApi.update(d.id!, d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['printProfiles'] }); setDraft(null); showToast('Settings saved') },
-    onError: (e: any) => showToast(e?.response?.data?.title ?? 'Failed to save settings', false),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['printProfiles'] }); setDraft(null); setSaveError(null); showToast('Settings saved') },
+    onError: onSaveError,
   })
   const deleteMutation = useMutation({
     mutationFn: (id: string) => printProfilesApi.delete(id),
@@ -122,9 +157,13 @@ export default function PrintSettings() {
 
   const save = () => {
     if (!draft) return
+    setSaveError(null)
     if (draft.id) updateMutation.mutate(draft)
     else createMutation.mutate(draft)
   }
+
+  /** True when the server rejected this specific field — used to outline the input. */
+  const badField = (name: keyof DraftProfile) => saveError?.field === name
 
   return (
     <div className="space-y-6">
@@ -199,9 +238,29 @@ export default function PrintSettings() {
             </div>
 
             <div className="p-6 space-y-5">
+              {/* Save failure — names the setting, echoes the value, states the range */}
+              {saveError && (
+                <div className="bg-red-950/50 border border-red-800 rounded-lg p-4 space-y-1.5">
+                  <p className="text-sm font-medium text-red-300">
+                    Couldn’t save this profile
+                  </p>
+                  <p className="text-xs text-red-300/90">{saveError.message}</p>
+                  {saveError.field && (
+                    <p className="text-[11px] text-red-400/80">
+                      Setting: <span className="font-mono">{saveError.field}</span>
+                      {saveError.providedValue && <> · you entered <span className="font-mono">{saveError.providedValue}</span></>}
+                      {saveError.expected && <> · must be {saveError.expected}</>}
+                    </p>
+                  )}
+                  <p className="text-[11px] text-red-400/60">
+                    Nothing was saved — fix the value above and press Save again.
+                  </p>
+                </div>
+              )}
+
               {/* Profile name */}
-              <F label="Profile Name">
-                <input className="input w-full" value={draft.name}
+              <F label="Profile Name" tip="A name you'll recognise when picking a profile on the STL Import screen.">
+                <input className={`input w-full ${badField('name') ? 'border-red-600' : ''}`} value={draft.name}
                   onChange={e => set('name', e.target.value)} placeholder="My Profile" />
               </F>
 
@@ -209,27 +268,32 @@ export default function PrintSettings() {
               <Section title="Basic Settings"
                 subtitle="These four settings directly drive Cura and affect every print">
                 <div className="grid grid-cols-2 gap-4">
-                  <F label="Nozzle Diameter (mm)" hint="machine_nozzle_size — 0 = use machine default">
-                    <WithAuto onAuto={() => { /* nozzle is the source of truth, no auto */ }}>
+                  <F label="Nozzle Diameter (mm)" hint="machine_nozzle_size — 0 = use machine default"
+                     tip="Diameter of the nozzle orifice. Layer height and line width are derived from it. Set 0 to inherit the value from the machine profile.">
+                    <WithAuto onAuto={() => applyAuto('nozzleDiameterMm')}>
                       <NumIn value={draft.nozzleDiameterMm ?? 0.4} min={0} max={5} step={0.05}
                         onChange={v => set('nozzleDiameterMm', v)} />
                     </WithAuto>
+                    <AutoHint>{CURA_NOZZLE_MM.toFixed(2)} mm (Cura default)</AutoHint>
                   </F>
-                  <F label="Layer Height (mm)" hint="layer_height">
+                  <F label="Layer Height (mm)" hint="layer_height"
+                     tip="Thickness of each printed layer. Smaller is finer but slower. Cura's rule of thumb is half the nozzle diameter.">
                     <WithAuto onAuto={() => applyAuto('layerHeightMm')}>
                       <NumIn value={draft.layerHeightMm ?? 0.2} min={0.05} max={0.8} step={0.05}
                         onChange={v => set('layerHeightMm', v)} />
                     </WithAuto>
                     <AutoHint>{((draft.nozzleDiameterMm ?? 0.4) * 0.5).toFixed(2)} mm (nozzle × 0.5)</AutoHint>
                   </F>
-                  <F label="Print Speed (mm/s)" hint="speed_print">
+                  <F label="Print Speed (mm/s)" hint="speed_print"
+                     tip="Base printing speed. Every other speed below is derived from this one when you press its Auto button.">
                     <WithAuto onAuto={() => applyAuto('printSpeedMmS')}>
                       <NumIn value={draft.printSpeedMmS ?? 60} min={1} max={500}
                         onChange={v => set('printSpeedMmS', v)} />
                     </WithAuto>
-                    <AutoHint>60 mm/s (Cura default)</AutoHint>
+                    <AutoHint>{CURA_PRINT_SPEED} mm/s (Cura default)</AutoHint>
                   </F>
-                  <F label="Flow / Extrusion (%)" hint="material_flow">
+                  <F label="Flow / Extrusion (%)" hint="material_flow"
+                     tip="Multiplier on how much material is extruded. Raise it if parts are under-extruded, lower it if walls bulge.">
                     <WithAuto onAuto={() => applyAuto('materialFlowPct')}>
                       <NumIn value={draft.materialFlowPct ?? 100} min={50} max={200} step={1}
                         onChange={v => set('materialFlowPct', v)} />
@@ -269,7 +333,8 @@ export default function PrintSettings() {
                   {draft.pelletModeEnabled && (
                     <div className="pl-3 space-y-3 border-l-2 border-amber-800/60">
                       <div className="grid grid-cols-2 gap-4">
-                        <F label="Virtual Filament Diameter (mm)" hint="material_diameter override">
+                        <F label="Virtual Filament Diameter (mm)" hint="material_diameter"
+                           tip="The diameter Cura's E-math is scaled to. It is not a real filament — it is the number that makes Cura's extrusion volume match what your screw actually pushes out.">
                           <NumIn
                             value={draft.virtualFilamentDiameterMm ?? 1.0}
                             min={0.1} max={5} step={0.05}
@@ -277,6 +342,79 @@ export default function PrintSettings() {
                           />
                           <AutoHint>1.0 mm typical — tune with calibration tests</AutoHint>
                         </F>
+                      </div>
+
+                      {/* ── Back-pressure & flow tuning ── */}
+                      <div className="space-y-3 pt-1">
+                        <p className="text-xs font-medium text-amber-300 flex items-center gap-1.5">
+                          Back-pressure &amp; flow tuning
+                          <InfoTip text="A pellet screw builds and releases pressure far more slowly than a filament feeder. These are the CuraEngine settings that model that lag — they are only sent to the slicer while Pellet Mode is on." />
+                        </p>
+
+                        <div className="grid grid-cols-3 gap-4">
+                          <F label="Pressure Advance" hint="material_pressure_advance_factor"
+                             tip="Compensates for the delay between the screw turning and material actually leaving the nozzle. Raise it if corners are under-filled and straights are over-filled.">
+                            <WithAuto onAuto={() => applyAuto('pressureAdvanceFactor')}>
+                              <NumIn value={draft.pressureAdvanceFactor ?? 0.05} min={0} max={10} step={0.01}
+                                onChange={v => set('pressureAdvanceFactor', v)} />
+                            </WithAuto>
+                            <AutoHint>0.05 (Cura default)</AutoHint>
+                          </F>
+
+                          <F label="Back-pressure Comp. (%)" hint="flow_rate_extrusion_offset_factor"
+                             tip="How hard to correct for flow-rate changes, as a percentage of one second of extrusion. 0 % disables the correction; 100 % is Cura's default.">
+                            <WithAuto onAuto={() => applyAuto('flowRateCompensationFactorPct')}>
+                              <NumIn value={draft.flowRateCompensationFactorPct ?? 100} min={0} max={1000} step={1}
+                                onChange={v => set('flowRateCompensationFactorPct', v)} />
+                            </WithAuto>
+                            <AutoHint>100 % (Cura default)</AutoHint>
+                          </F>
+
+                          <F label="Max Comp. Offset (mm)" hint="flow_rate_max_extrusion_offset"
+                             tip="Upper limit on the back-pressure correction, in mm of material movement. 0 means no cap. Use it to stop the compensation over-correcting on a high-inertia screw.">
+                            <WithAuto onAuto={() => applyAuto('flowRateMaxExtrusionOffsetMm')}>
+                              <NumIn value={draft.flowRateMaxExtrusionOffsetMm ?? 0} min={0} max={100} step={0.1}
+                                onChange={v => set('flowRateMaxExtrusionOffsetMm', v)} />
+                            </WithAuto>
+                            <AutoHint>0 mm (no cap)</AutoHint>
+                          </F>
+
+                          <F label="Max Flow Rate (mm³/s)" hint="material_max_flowrate"
+                             tip="Your screw's melt throughput ceiling. Cura slows moves down so the volumetric rate never exceeds this — the main guard against skipping or under-extrusion at speed.">
+                            <WithAuto onAuto={() => applyAuto('materialMaxFlowRateMm3S')}>
+                              <NumIn value={draft.materialMaxFlowRateMm3S ?? 16} min={0.1} max={1000} step={0.5}
+                                onChange={v => set('materialMaxFlowRateMm3S', v)} />
+                            </WithAuto>
+                            <AutoHint>16 mm³/s (Cura default)</AutoHint>
+                          </F>
+
+                          <F label="Flow Equalization (%)" hint="speed_equalize_flow_width_factor"
+                             tip="At 100 % the machine slows down for wide lines and speeds up for thin ones so volumetric flow stays constant. Above 100 % it over-compensates, which helps when wide lines need extra pressure.">
+                            <WithAuto onAuto={() => applyAuto('flowEqualizationRatioPct')}>
+                              <NumIn value={draft.flowEqualizationRatioPct ?? 100} min={0} max={1000} step={1}
+                                onChange={v => set('flowEqualizationRatioPct', v)} />
+                            </WithAuto>
+                            <AutoHint>100 % (Cura default)</AutoHint>
+                          </F>
+
+                          <F label="Initial Layer Flow (%)" hint="material_flow_layer_0"
+                             tip="Separate flow multiplier for the first layer only. Raise it to squash the first layer harder onto the bed.">
+                            <WithAuto onAuto={() => applyAuto('initialLayerFlowPct')}>
+                              <NumIn value={draft.initialLayerFlowPct ?? 100} min={1} max={500} step={1}
+                                onChange={v => set('initialLayerFlowPct', v)} />
+                            </WithAuto>
+                            <AutoHint>100 % (Cura default)</AutoHint>
+                          </F>
+
+                          <F label="Standby Temp (°C)" hint="material_standby_temperature"
+                             tip="Nozzle temperature while a different tool is printing. Keep it high enough that the pellet melt doesn't solidify in the barrel.">
+                            <WithAuto onAuto={() => applyAuto('standbyTemperatureDegC')}>
+                              <NumIn value={draft.standbyTemperatureDegC ?? 150} min={0} max={500} step={5}
+                                onChange={v => set('standbyTemperatureDegC', v)} />
+                            </WithAuto>
+                            <AutoHint>150 °C (Cura default)</AutoHint>
+                          </F>
+                        </div>
                       </div>
 
                       <div className="bg-amber-950/30 border border-amber-800/40 rounded-lg p-3 text-xs text-amber-300/80 space-y-1.5">
@@ -308,49 +446,49 @@ export default function PrintSettings() {
                   <Section title="Speed Settings"
                     subtitle="Fine-tune individual move categories — wired to separate Cura speed_* keys">
                     <div className="grid grid-cols-3 gap-4">
-                      <F label="Travel Speed (mm/s)" hint="speed_travel">
+                      <F label="Travel Speed (mm/s)" hint="speed_travel" tip="Speed of non-printing moves between features. Higher reduces oozing time but needs a rigid frame.">
                         <WithAuto onAuto={() => applyAuto('travelSpeedMmS')}>
                           <NumIn value={draft.travelSpeedMmS ?? 150} min={1} max={500}
                             onChange={v => set('travelSpeedMmS', v)} />
                         </WithAuto>
                         <AutoHint>150 mm/s</AutoHint>
                       </F>
-                      <F label="Outer Wall Speed (mm/s)" hint="speed_wall_0">
+                      <F label="Outer Wall Speed (mm/s)" hint="speed_wall_0" tip="Speed of the visible outermost perimeter. Slower here gives the best surface finish.">
                         <WithAuto onAuto={() => applyAuto('wallSpeedMmS')}>
                           <NumIn value={draft.wallSpeedMmS ?? 30} min={1} max={500}
                             onChange={v => set('wallSpeedMmS', v)} />
                         </WithAuto>
                         <AutoHint>{((draft.printSpeedMmS ?? 60) * 0.5).toFixed(0)} mm/s (print × 0.5)</AutoHint>
                       </F>
-                      <F label="Inner Wall Speed (mm/s)" hint="speed_wall_x">
+                      <F label="Inner Wall Speed (mm/s)" hint="speed_wall_x" tip="Speed of the hidden inner perimeters. Can be faster than the outer wall without hurting looks.">
                         <WithAuto onAuto={() => applyAuto('innerWallSpeedMmS')}>
                           <NumIn value={draft.innerWallSpeedMmS ?? 60} min={1} max={500}
                             onChange={v => set('innerWallSpeedMmS', v)} />
                         </WithAuto>
                         <AutoHint>{(draft.printSpeedMmS ?? 60).toFixed(0)} mm/s (= print)</AutoHint>
                       </F>
-                      <F label="Infill Speed (mm/s)" hint="speed_infill">
+                      <F label="Infill Speed (mm/s)" hint="speed_infill" tip="Speed of the internal fill. Usually the fastest setting since it is never seen.">
                         <WithAuto onAuto={() => applyAuto('infillSpeedMmS')}>
                           <NumIn value={draft.infillSpeedMmS ?? 90} min={1} max={500}
                             onChange={v => set('infillSpeedMmS', v)} />
                         </WithAuto>
                         <AutoHint>{((draft.printSpeedMmS ?? 60) * 1.5).toFixed(0)} mm/s (print × 1.5)</AutoHint>
                       </F>
-                      <F label="Top/Bottom Speed (mm/s)" hint="speed_topbottom">
+                      <F label="Top/Bottom Speed (mm/s)" hint="speed_topbottom" tip="Speed of solid top and bottom surfaces. Slower gives flatter, cleaner skins.">
                         <WithAuto onAuto={() => applyAuto('topBottomSpeedMmS')}>
                           <NumIn value={draft.topBottomSpeedMmS ?? 30} min={1} max={500}
                             onChange={v => set('topBottomSpeedMmS', v)} />
                         </WithAuto>
                         <AutoHint>{((draft.printSpeedMmS ?? 60) * 0.5).toFixed(0)} mm/s (print × 0.5)</AutoHint>
                       </F>
-                      <F label="Initial Layer Speed (mm/s)" hint="speed_layer_0">
+                      <F label="Initial Layer Speed (mm/s)" hint="speed_layer_0" tip="Speed of the very first layer. Slow is critical for bed adhesion.">
                         <WithAuto onAuto={() => applyAuto('firstLayerSpeedMmS')}>
                           <NumIn value={draft.firstLayerSpeedMmS ?? 20} min={1} max={100}
                             onChange={v => set('firstLayerSpeedMmS', v)} />
                         </WithAuto>
                         <AutoHint>20 mm/s</AutoHint>
                       </F>
-                      <F label="Init. Layer Travel (mm/s)" hint="speed_travel_layer_0">
+                      <F label="Init. Layer Travel (mm/s)" hint="speed_travel_layer_0" tip="Travel speed during the first layer only. Kept low so the nozzle does not drag the fresh layer.">
                         <NumIn value={draft.firstLayerTravelSpeedMmS ?? 50} min={1} max={500}
                           onChange={v => set('firstLayerTravelSpeedMmS', v)} />
                       </F>
@@ -359,22 +497,22 @@ export default function PrintSettings() {
 
                   <Section title="Structure">
                     <div className="grid grid-cols-4 gap-4">
-                      <F label="Wall Count">
+                      <F label="Wall Count" tip="Number of perimeter loops per layer. More walls means a stronger, heavier part.">
                         <NumIn value={draft.wallCount ?? 3} min={1} max={20}
                           onChange={v => set('wallCount', v)} />
                       </F>
-                      <F label="Line Width (mm)" hint="line_width">
+                      <F label="Line Width (mm)" hint="line_width" tip="Width of a single extruded line. Defaults to the nozzle diameter.">
                         <WithAuto onAuto={() => applyAuto('lineWidthMm')}>
                           <NumIn value={draft.lineWidthMm ?? 0.4} min={0.1} max={1.5} step={0.05}
                             onChange={v => set('lineWidthMm', v)} />
                         </WithAuto>
                         <AutoHint>{(draft.nozzleDiameterMm ?? 0.4).toFixed(2)} mm (= nozzle)</AutoHint>
                       </F>
-                      <F label="Top Layers" hint="top_layers">
+                      <F label="Top Layers" hint="top_layers" tip="How many solid layers close the top of the part.">
                         <NumIn value={draft.topLayers ?? 4} min={0} max={20}
                           onChange={v => set('topLayers', v)} />
                       </F>
-                      <F label="Bottom Layers" hint="bottom_layers">
+                      <F label="Bottom Layers" hint="bottom_layers" tip="How many solid layers form the bottom of the part.">
                         <NumIn value={draft.bottomLayers ?? 4} min={0} max={20}
                           onChange={v => set('bottomLayers', v)} />
                       </F>
@@ -383,15 +521,15 @@ export default function PrintSettings() {
 
                   <Section title="Temperature & Cooling">
                     <div className="grid grid-cols-3 gap-4">
-                      <F label="Print Temp (°C)">
+                      <F label="Print Temp (°C)" tip="Nozzle temperature during printing. Match it to your material.">
                         <NumIn value={draft.printTemperatureDegC ?? 210} min={150} max={350}
                           onChange={v => set('printTemperatureDegC', v)} />
                       </F>
-                      <F label="Bed Temp (°C)">
+                      <F label="Bed Temp (°C)" tip="Heated bed temperature. Helps first-layer adhesion and reduces warping.">
                         <NumIn value={draft.bedTemperatureDegC ?? 60} min={0} max={150}
                           onChange={v => set('bedTemperatureDegC', v)} />
                       </F>
-                      <F label="Fan Speed (%)">
+                      <F label="Fan Speed (%)" tip="Part-cooling fan speed. High for PLA, low or off for ABS and most pellets.">
                         <WithAuto onAuto={() => applyAuto('coolingFanSpeedPct')}>
                           <NumIn value={draft.coolingFanSpeedPct ?? 100} min={0} max={100}
                             onChange={v => set('coolingFanSpeedPct', v)} />
@@ -399,11 +537,11 @@ export default function PrintSettings() {
                       </F>
                     </div>
                     <div className="grid grid-cols-2 gap-4 mt-4">
-                      <F label="Minimum Layer Time (s)" hint="cool_min_layer_time">
+                      <F label="Minimum Layer Time (s)" hint="cool_min_layer_time" tip="Smallest time to spend on a layer. Small layers are slowed down so they can cool before the next one lands.">
                         <NumIn value={draft.minLayerTimeSec ?? 5} min={0} max={120} step={1}
                           onChange={v => set('minLayerTimeSec', v)} />
                       </F>
-                      <F label="Minimum Speed (mm/s)" hint="cool_min_speed">
+                      <F label="Minimum Speed (mm/s)" hint="cool_min_speed" tip="Floor for the slow-down imposed by minimum layer time, so the machine never crawls.">
                         <NumIn value={draft.minSpeedMmS ?? 10} min={0} max={100} step={1}
                           onChange={v => set('minSpeedMmS', v)} />
                       </F>
@@ -412,7 +550,7 @@ export default function PrintSettings() {
 
                   <Section title="Retraction" subtitle="Controls filament pull-back during travel moves">
                     <div className="mb-3">
-                      <F label="Retraction" hint="retraction_enable">
+                      <F label="Retraction" tip="Pull material back during travel moves to stop stringing. Pellet extruders often do better with this off." hint="retraction_enable">
                         <Toggle checked={draft.retractionEnabled !== false}
                           onChange={v => set('retractionEnabled', v)}
                           labelOn="Enabled" labelOff="Disabled" />
@@ -420,15 +558,15 @@ export default function PrintSettings() {
                     </div>
                     {draft.retractionEnabled !== false && (
                       <div className="grid grid-cols-3 gap-4">
-                        <F label="Distance (mm)" hint="retraction_amount">
+                        <F label="Distance (mm)" tip="How far to pull the material back on each retraction." hint="retraction_amount">
                           <NumIn value={draft.retractLengthMm ?? 5} min={0} max={20} step={0.1}
                             onChange={v => set('retractLengthMm', v)} />
                         </F>
-                        <F label="Speed (mm/s)" hint="retraction_speed">
+                        <F label="Speed (mm/s)" tip="How fast the retraction and its recovery happen." hint="retraction_speed">
                           <NumIn value={draft.retractSpeedMmS ?? 45} min={1} max={100} step={1}
                             onChange={v => set('retractSpeedMmS', v)} />
                         </F>
-                        <F label="Min Travel (mm)" hint="retraction_min_travel">
+                        <F label="Min Travel (mm)" tip="Travel moves shorter than this do not trigger a retraction — avoids constant retracting over small gaps." hint="retraction_min_travel">
                           <NumIn value={draft.retractMinTravelMm ?? 1.5} min={0} max={20} step={0.5}
                             onChange={v => set('retractMinTravelMm', v)} />
                         </F>
@@ -438,17 +576,17 @@ export default function PrintSettings() {
 
                   <Section title="Motion & Surface" subtitle="Firmware motion limits and surface quality">
                     <div className="grid grid-cols-3 gap-4">
-                      <F label="Acceleration Control" hint="acceleration_enabled">
+                      <F label="Acceleration Control" tip="Let the slicer set per-feature acceleration limits. Turn on only if your firmware honours M204." hint="acceleration_enabled">
                         <Toggle checked={!!draft.accelerationControlEnabled}
                           onChange={v => set('accelerationControlEnabled', v)}
                           labelOn="Enabled" labelOff="Disabled" />
                       </F>
-                      <F label="Jerk Control" hint="jerk_enabled">
+                      <F label="Jerk Control" tip="Let the slicer set per-feature jerk / instantaneous speed change. Turn on only if your firmware honours M205." hint="jerk_enabled">
                         <Toggle checked={!!draft.jerkControlEnabled}
                           onChange={v => set('jerkControlEnabled', v)}
                           labelOn="Enabled" labelOff="Disabled" />
                       </F>
-                      <F label="Monotonic Top/Bottom" hint="skin_monotonic">
+                      <F label="Monotonic Top/Bottom" tip="Print top and bottom lines in one consistent direction so they overlap evenly. Gives a cleaner surface at a small speed cost." hint="skin_monotonic">
                         <Toggle checked={draft.skinMonotonic !== false}
                           onChange={v => set('skinMonotonic', v)}
                           labelOn="Enabled" labelOff="Disabled" />
@@ -458,11 +596,11 @@ export default function PrintSettings() {
 
                   <Section title="Infill">
                     <div className="grid grid-cols-2 gap-4">
-                      <F label="Infill Density (%)">
+                      <F label="Infill Density (%)" tip="How much of the interior is filled. 0 % is hollow, 100 % is solid.">
                         <NumIn value={draft.infillDensityPct ?? 20} min={0} max={100}
                           onChange={v => set('infillDensityPct', v)} />
                       </F>
-                      <F label="Infill Pattern">
+                      <F label="Infill Pattern" tip="Geometry used to fill the interior. Grid and lines are fast; gyroid is stronger in every direction.">
                         <select className="input w-full" value={draft.infillPattern ?? 'grid'}
                           onChange={e => set('infillPattern', e.target.value)}>
                           {['grid','lines','triangles','trihexagon','cubic','concentric','zigzag','cross','gyroid','honeycomb','lightning'].map(p => (
@@ -539,12 +677,20 @@ function Section({ title, subtitle, children }: { title: string; subtitle?: stri
   )
 }
 
-function F({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function F({ label, hint, tip, children }: {
+  label: string
+  /** The CuraEngine key, shown inline in mono. */
+  hint?: string
+  /** Plain-language explanation, shown on hover. */
+  tip?: string
+  children: React.ReactNode
+}) {
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-1.5">
         <label className="text-sm text-gray-400">{label}</label>
-        {hint && <span className="text-[10px] text-gray-600 font-mono">{hint}</span>}
+        {tip && <InfoTip text={tip} cura={hint} />}
+        {hint && !tip && <span className="text-[10px] text-gray-600 font-mono">{hint}</span>}
       </div>
       {children}
     </div>

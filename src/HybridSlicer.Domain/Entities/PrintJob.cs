@@ -36,6 +36,13 @@ public class PrintJob
     public bool GcodeHoming { get; private set; } = true;
     public bool GcodeLevelling { get; private set; }
 
+    /// <summary>
+    /// When false, the custom G-code blocks defined for this job's machine are
+    /// skipped entirely during hybrid generation. Lets a user slice a plain part
+    /// without their machine's purge/probe/park blocks firing.
+    /// </summary>
+    public bool ApplyCustomGCodeBlocks { get; private set; } = true;
+
     // Multi-bed: which bed this job belongs to (0-based). Null = single-bed / legacy.
     public int? BedIndex { get; private set; }
 
@@ -76,7 +83,8 @@ public class PrintJob
         bool gcodeHoming = true,
         bool gcodeLevelling = false,
         int? bedIndex = null,
-        Guid? parentJobId = null)
+        Guid? parentJobId = null,
+        bool applyCustomGCodeBlocks = true)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("INVALID_NAME", "Job name must not be empty.");
@@ -104,6 +112,7 @@ public class PrintJob
             GcodeLevelling = gcodeLevelling,
             BedIndex = bedIndex,
             ParentJobId = parentJobId,
+            ApplyCustomGCodeBlocks = applyCustomGCodeBlocks,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };

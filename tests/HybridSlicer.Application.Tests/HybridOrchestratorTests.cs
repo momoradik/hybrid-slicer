@@ -73,6 +73,79 @@ public class HybridOrchestratorTests : IDisposable
         result.Plan.Steps.Any(s => s.OperationType == OperationType.CustomGCode).Should().BeTrue();
     }
 
+    [Fact]
+    public async Task BuildPlanAsync_FiresLayerIntervalBlock_OnItsCadenceOnly()
+    {
+        // 30-layer print, no CNC at all — isolates the EveryNLayers cadence.
+        var printGCode = string.Join("\n",
+            Enumerable.Range(1, 30).Select(l => $";LAYER:{l}\nG1 X{l} Y{l} Z{l * 0.2}\n"));
+
+        var printPath = Path.Combine(_tempDir, "print-periodic.gcode");
+        await File.WriteAllTextAsync(printPath, printGCode);
+        var outputPath = Path.Combine(_tempDir, "hybrid-periodic.gcode");
+
+        var blocks = new List<CustomGCodeBlock>
+        {
+            // Every 10 layers, phased from layer 10, stopping after layer 25:
+            // should fire on 10 and 20 — never on 30 (past EndLayer).
+            CustomGCodeBlock.Create(
+                "Periodic Wipe", "G1 X5 Y5 F3000 ; wipe", GCodeTrigger.EveryNLayers,
+                machineProfileId: null, repeatEveryNLayers: 10, startLayer: 10, endLayer: 25),
+        };
+
+        var request = new HybridPlanRequest(
+            JobId: Guid.NewGuid(),
+            PrintGCodePath: printPath,
+            CncGCodeByLayer: new Dictionary<int, string>(),
+            CncPreamble: "",
+            CncPostamble: "",
+            MachineEveryNLayers: 5,   // unused here — CncGCodeByLayer is empty
+            TotalPrintLayers: 30,
+            CncToolId: Guid.NewGuid(),
+            EnabledCustomBlocks: blocks,
+            OutputGCodePath: outputPath);
+
+        await _orchestrator.BuildPlanAsync(request);
+
+        var content = await File.ReadAllTextAsync(outputPath);
+
+        // Fires exactly twice: layers 10 and 20.
+        content.Should().Contain("every 10 layers @ layer 10");
+        content.Should().Contain("every 10 layers @ layer 20");
+        content.Should().NotContain("@ layer 30");   // beyond EndLayer
+        content.Should().NotContain("@ layer 1 ");   // before StartLayer
+        System.Text.RegularExpressions.Regex
+            .Matches(content, "Periodic Wipe' every").Count.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task BuildPlanAsync_DisabledLayerIntervalBlock_NeverFires()
+    {
+        var printGCode = string.Join("\n",
+            Enumerable.Range(1, 12).Select(l => $";LAYER:{l}\nG1 X{l} Y{l}\n"));
+        var printPath = Path.Combine(_tempDir, "print-disabled.gcode");
+        await File.WriteAllTextAsync(printPath, printGCode);
+        var outputPath = Path.Combine(_tempDir, "hybrid-disabled.gcode");
+
+        var block = CustomGCodeBlock.Create(
+            "Off Block", "M117 nope", GCodeTrigger.EveryNLayers,
+            machineProfileId: null, repeatEveryNLayers: 5, startLayer: 5);
+        block.Disable();
+
+        await _orchestrator.BuildPlanAsync(new HybridPlanRequest(
+            JobId: Guid.NewGuid(),
+            PrintGCodePath: printPath,
+            CncGCodeByLayer: new Dictionary<int, string>(),
+            CncPreamble: "", CncPostamble: "",
+            MachineEveryNLayers: 5,   // unused here — CncGCodeByLayer is empty
+            TotalPrintLayers: 12,
+            CncToolId: Guid.NewGuid(),
+            EnabledCustomBlocks: [block],
+            OutputGCodePath: outputPath));
+
+        (await File.ReadAllTextAsync(outputPath)).Should().NotContain("M117 nope");
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))

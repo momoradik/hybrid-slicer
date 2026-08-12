@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import DisabledHint from '../components/DisabledHint'
+import InfoTip from '../components/InfoTip'
 import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js'
@@ -114,6 +115,8 @@ interface SavedState {
   // G-code startup options
   gcodeHoming: boolean
   gcodeLevelling: boolean
+  /** Whether this machine's custom G-code blocks are injected into the output. */
+  applyCustomGCodeBlocks: boolean
   // Hybrid CNC options (only used when machine type is Hybrid)
   cncToolId: string
   machineEveryN: number
@@ -131,7 +134,7 @@ const _initState: SavedState = {
   generatedJobId: null, activeTab: 'import', supportEnabled: false, supportType: 'normal',
   supportPlacement: 'everywhere', infillPattern: 'grid', infillDensity: 15,
   supportInfillPattern: 'grid', supportInfillDensity: 15, adhesionType: 'none',
-  gcodeHoming: true, gcodeLevelling: false,
+  gcodeHoming: true, gcodeLevelling: false, applyCustomGCodeBlocks: true,
   cncToolId: '', machineEveryN: 10, skipMachiningLayers: 0, machineInnerWalls: false, avoidSupports: false,
   supportClearanceMm: 2.0, autoMachiningFrequency: false, zSafetyOffsetMm: 0,
   spindleRpmOverride: null,
@@ -181,6 +184,7 @@ export default function StlImport() {
   // G-code startup options
   const [gcodeHoming, setGcodeHoming]         = useState(() => _saved.gcodeHoming)
   const [gcodeLevelling, setGcodeLevelling]   = useState(() => _saved.gcodeLevelling)
+  const [applyCustomGCodeBlocks, setApplyCustomGCodeBlocks] = useState(() => _saved.applyCustomGCodeBlocks)
 
   // Hybrid CNC state (only shown when machine is Hybrid)
   const [cncToolId, setCncToolId]                       = useState(() => _saved.cncToolId)
@@ -270,6 +274,7 @@ export default function StlImport() {
   useEffect(() => { _saved.adhesionType = adhesionType }, [adhesionType])
   useEffect(() => { _saved.gcodeHoming = gcodeHoming }, [gcodeHoming])
   useEffect(() => { _saved.gcodeLevelling = gcodeLevelling }, [gcodeLevelling])
+  useEffect(() => { _saved.applyCustomGCodeBlocks = applyCustomGCodeBlocks }, [applyCustomGCodeBlocks])
   useEffect(() => { _saved.cncToolId = cncToolId }, [cncToolId])
   useEffect(() => { _saved.machineEveryN = machineEveryN }, [machineEveryN])
   useEffect(() => { _saved.skipMachiningLayers = skipMachiningLayers }, [skipMachiningLayers])
@@ -492,6 +497,7 @@ export default function StlImport() {
           fd.append('adhesionType', adhesionType)
           fd.append('gcodeHoming', gcodeHoming.toString())
           fd.append('gcodeLevelling', gcodeLevelling.toString())
+          fd.append('applyCustomGCodeBlocks', applyCustomGCodeBlocks.toString())
           fd.append('bedIndex', bi.toString())
           const { jobId } = await jobsApi.uploadStl(fd)
           await jobsApi.slice(jobId)
@@ -553,6 +559,7 @@ export default function StlImport() {
       fd.append('adhesionType', adhesionType)
       fd.append('gcodeHoming', gcodeHoming.toString())
       fd.append('gcodeLevelling', gcodeLevelling.toString())
+      fd.append('applyCustomGCodeBlocks', applyCustomGCodeBlocks.toString())
       const { jobId } = await uploadMutation.mutateAsync(fd)
       await sliceMutation.mutateAsync(jobId)
 
@@ -624,6 +631,7 @@ export default function StlImport() {
       fd.append('adhesionType', adhesionType)
       fd.append('gcodeHoming', gcodeHoming.toString())
       fd.append('gcodeLevelling', gcodeLevelling.toString())
+      fd.append('applyCustomGCodeBlocks', applyCustomGCodeBlocks.toString())
       if (primary.bedIndex != null && selectedMachineBeds.length > 1)
         fd.append('bedIndex', primary.bedIndex.toString())
       const { jobId } = await jobsApi.uploadStl(fd)
@@ -1187,6 +1195,30 @@ export default function StlImport() {
           </div>
           <p className="text-[10px] text-gray-600">
             Selected commands are inserted at the start of the G-code, replacing Cura defaults.
+          </p>
+        </section>
+
+        <Divider />
+
+        {/* Custom G-code blocks opt-in */}
+        <section className="space-y-2">
+          <SectionHeader>Custom G-code Blocks</SectionHeader>
+          <label className="flex items-start gap-2 text-sm text-gray-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={applyCustomGCodeBlocks}
+              onChange={e => setApplyCustomGCodeBlocks(e.target.checked)}
+              className="accent-primary mt-0.5"
+            />
+            <span className="flex items-center gap-1.5">
+              Apply custom G-code blocks
+              <InfoTip text="When ticked, the active blocks defined for this machine on the G-code Customisation page — plus any shared blocks — are injected into the generated G-code. Untick to slice this job without them." />
+            </span>
+          </label>
+          <p className="text-[10px] text-gray-600">
+            {applyCustomGCodeBlocks
+              ? 'This machine’s active blocks (and shared blocks) will be included in the output.'
+              : 'No custom blocks will be injected for this job. Blocks stay defined; they are just skipped here.'}
           </p>
         </section>
 

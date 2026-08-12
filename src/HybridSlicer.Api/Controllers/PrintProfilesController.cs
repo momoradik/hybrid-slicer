@@ -43,7 +43,15 @@ public sealed class PrintProfilesController : ControllerBase
             .WithMotionControl(req.AccelerationControlEnabled, req.JerkControlEnabled)
             .WithSkinMonotonic(req.SkinMonotonic)
             .WithFirstLayerTravelSpeed(req.FirstLayerTravelSpeedMmS)
-            .WithPelletMode(req.PelletModeEnabled, req.VirtualFilamentDiameterMm);
+            .WithPelletMode(req.PelletModeEnabled, req.VirtualFilamentDiameterMm)
+            .WithPelletTuning(
+                req.PressureAdvanceFactor,
+                req.FlowRateCompensationFactorPct,
+                req.FlowRateMaxExtrusionOffsetMm,
+                req.MaterialMaxFlowRateMm3S,
+                req.FlowEqualizationRatioPct,
+                req.InitialLayerFlowPct,
+                req.StandbyTemperatureDegC);
 
         await _repo.AddAsync(profile, ct);
         return CreatedAtAction(nameof(GetById), new { id = profile.Id }, profile);
@@ -73,7 +81,15 @@ public sealed class PrintProfilesController : ControllerBase
             .WithMotionControl(req.AccelerationControlEnabled, req.JerkControlEnabled)
             .WithSkinMonotonic(req.SkinMonotonic)
             .WithFirstLayerTravelSpeed(req.FirstLayerTravelSpeedMmS)
-            .WithPelletMode(req.PelletModeEnabled, req.VirtualFilamentDiameterMm);
+            .WithPelletMode(req.PelletModeEnabled, req.VirtualFilamentDiameterMm)
+            .WithPelletTuning(
+                req.PressureAdvanceFactor,
+                req.FlowRateCompensationFactorPct,
+                req.FlowRateMaxExtrusionOffsetMm,
+                req.MaterialMaxFlowRateMm3S,
+                req.FlowEqualizationRatioPct,
+                req.InitialLayerFlowPct,
+                req.StandbyTemperatureDegC);
 
         await _repo.UpdateAsync(profile, ct);
         return Ok(profile);
@@ -128,4 +144,12 @@ public record CreatePrintProfileRequest(
     bool   SkinMonotonic                = true,
     double FirstLayerTravelSpeedMmS     = 50.0,
     bool   PelletModeEnabled            = false,
-    double VirtualFilamentDiameterMm    = 1.0);
+    double VirtualFilamentDiameterMm    = 1.0,
+    // Pellet / high-flow tuning — defaults match CuraEngine's own defaults
+    double PressureAdvanceFactor         = 0.05,
+    double FlowRateCompensationFactorPct = 100.0,
+    double FlowRateMaxExtrusionOffsetMm  = 0.0,
+    double MaterialMaxFlowRateMm3S       = 16.0,
+    double FlowEqualizationRatioPct      = 100.0,
+    double InitialLayerFlowPct           = 100.0,
+    double StandbyTemperatureDegC        = 150.0);

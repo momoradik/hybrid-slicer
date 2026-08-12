@@ -52,7 +52,15 @@ public sealed class PlanHybridProcessHandler : IRequestHandler<PlanHybridProcess
             throw new DomainException("NO_TOOLPATH",
                 "Toolpath G-code not found. Run generate-toolpaths first.");
 
-        var enabledBlocks = await _blocks.GetEnabledAsync(ct);
+        // Blocks are per-machine: this job's machine plus the shared ones. The job
+        // can opt out entirely (checkbox on STL import).
+        var enabledBlocks = job.ApplyCustomGCodeBlocks
+            ? await _blocks.GetForMachineAsync(job.MachineProfileId, enabledOnly: true, ct)
+            : [];
+
+        _logger.LogInformation(
+            "Job {JobId}: {Count} custom G-code block(s) apply (machine {MachineId}, opted-in={OptedIn})",
+            job.Id, enabledBlocks.Count, job.MachineProfileId, job.ApplyCustomGCodeBlocks);
 
         job.MarkPlanningHybrid();
         await _jobs.UpdateAsync(job, ct);

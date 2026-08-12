@@ -102,6 +102,19 @@ try
                 "ALTER TABLE PrintProfiles ADD COLUMN RetractionEnabled INTEGER NOT NULL DEFAULT 1",
                 "ALTER TABLE PrintProfiles ADD COLUMN SkinMonotonic INTEGER NOT NULL DEFAULT 1",
                 "ALTER TABLE PrintProfiles ADD COLUMN FirstLayerTravelSpeedMmS REAL NOT NULL DEFAULT 50.0",
+                // Pellet / high-flow tuning (mapped onto real CuraEngine keys)
+                "ALTER TABLE PrintProfiles ADD COLUMN PressureAdvanceFactor REAL NOT NULL DEFAULT 0.05",
+                "ALTER TABLE PrintProfiles ADD COLUMN FlowRateCompensationFactorPct REAL NOT NULL DEFAULT 100.0",
+                "ALTER TABLE PrintProfiles ADD COLUMN FlowRateMaxExtrusionOffsetMm REAL NOT NULL DEFAULT 0.0",
+                "ALTER TABLE PrintProfiles ADD COLUMN MaterialMaxFlowRateMm3S REAL NOT NULL DEFAULT 16.0",
+                "ALTER TABLE PrintProfiles ADD COLUMN FlowEqualizationRatioPct REAL NOT NULL DEFAULT 100.0",
+                "ALTER TABLE PrintProfiles ADD COLUMN InitialLayerFlowPct REAL NOT NULL DEFAULT 100.0",
+                "ALTER TABLE PrintProfiles ADD COLUMN StandbyTemperatureDegC REAL NOT NULL DEFAULT 150.0",
+                // CustomGCodeBlock: per-machine scoping + layer-interval firing
+                "ALTER TABLE CustomGCodeBlocks ADD COLUMN MachineProfileId TEXT NULL",
+                "ALTER TABLE CustomGCodeBlocks ADD COLUMN RepeatEveryNLayers INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE CustomGCodeBlocks ADD COLUMN StartLayer INTEGER NOT NULL DEFAULT 1",
+                "ALTER TABLE CustomGCodeBlocks ADD COLUMN EndLayer INTEGER NULL",
             ];
             foreach (var sql in alters)
                 try { await db.Database.ExecuteSqlRawAsync(sql); } catch { /* column already exists */ }

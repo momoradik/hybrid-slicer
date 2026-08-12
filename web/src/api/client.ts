@@ -103,7 +103,11 @@ export const jobsApi = {
 
 // ── Custom G-code Blocks ──────────────────────────────────────────────────
 export const customGCodeApi = {
-  getAll: () => http.get<CustomGCodeBlock[]>('/custom-gcode-blocks').then(r => r.data),
+  /** Omit machineProfileId for every block; pass one for that machine's blocks + the shared ones. */
+  getAll: (machineProfileId?: string) =>
+    http.get<CustomGCodeBlock[]>('/custom-gcode-blocks', {
+      params: machineProfileId ? { machineProfileId } : undefined,
+    }).then(r => r.data),
   create: (data: Partial<CustomGCodeBlock>) => http.post<CustomGCodeBlock>('/custom-gcode-blocks', data).then(r => r.data),
   update: (id: string, data: Partial<CustomGCodeBlock>) => http.put<CustomGCodeBlock>(`/custom-gcode-blocks/${id}`, data).then(r => r.data),
   toggle: (id: string, enabled: boolean) => http.patch(`/custom-gcode-blocks/${id}/toggle`, { enabled }),

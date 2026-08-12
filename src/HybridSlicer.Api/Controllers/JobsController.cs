@@ -73,7 +73,8 @@ public sealed class JobsController : ControllerBase
             GcodeHoming: request.GcodeHoming,
             GcodeLevelling: request.GcodeLevelling,
             BedIndex: request.BedIndex,
-            ParentJobId: request.ParentJobId), ct);
+            ParentJobId: request.ParentJobId,
+            ApplyCustomGCodeBlocks: request.ApplyCustomGCodeBlocks), ct);
 
         return CreatedAtAction(nameof(GetById), new { id = result.JobId }, result);
     }
@@ -381,7 +382,8 @@ public record UploadStlRequest(
     [FromForm] bool GcodeHoming = true,
     [FromForm] bool GcodeLevelling = false,
     [FromForm] int? BedIndex = null,
-    [FromForm] Guid? ParentJobId = null);
+    [FromForm] Guid? ParentJobId = null,
+    [FromForm] bool ApplyCustomGCodeBlocks = true);
 
 public record CreateJobRequest(string JobName, Guid MachineProfileId, Guid PrintProfileId, Guid MaterialId);
 public record GenerateToolpathsRequest(

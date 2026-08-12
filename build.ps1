@@ -142,7 +142,10 @@ if ($started) {
 Write-Host ""
 Write-Host "-- Installer (optional) ---" -ForegroundColor DarkGray
 
-if (Test-Path $Iscc) {
+# $Iscc is null when neither candidate path exists — Test-Path $null throws under
+# $ErrorActionPreference = "Stop", which failed the whole script after the server
+# had already started successfully.
+if ($Iscc) {
     Write-Host "   Inno Setup found. Publishing framework-dependent build..." -ForegroundColor DarkGray
 
     $PublishApp = "$PublishDir\app"

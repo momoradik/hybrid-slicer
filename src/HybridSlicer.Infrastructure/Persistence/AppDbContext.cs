@@ -137,6 +137,16 @@ public sealed class AppDbContext : DbContext
             e.Property(x => x.Name).HasMaxLength(200).IsRequired();
             e.Property(x => x.Trigger).HasConversion<string>();
             e.Property(x => x.GCodeContent).HasMaxLength(int.MaxValue);
+
+            // Machine scoping — null MachineProfileId means "shared by every machine".
+            // Deliberately no FK constraint: deleting a machine profile is a soft
+            // delete, and orphaned blocks stay visible in the shared list rather
+            // than disappearing silently.
+            e.Property(x => x.MachineProfileId);
+            e.HasIndex(x => x.MachineProfileId);
+            e.Property(x => x.RepeatEveryNLayers).HasDefaultValue(0);
+            e.Property(x => x.StartLayer).HasDefaultValue(1);
+            e.Property(x => x.EndLayer);
         });
 
         // ── BrandingSettings ─────────────────────────────────────────────────

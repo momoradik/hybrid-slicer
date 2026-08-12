@@ -89,7 +89,19 @@ public sealed record SlicingParameters(
     double MaterialFlowPct = 100.0,
 
     // Bed adhesion
-    string AdhesionType = "none");
+    string AdhesionType = "none",
+
+    // ── Pellet / high-flow tuning ────────────────────────────────────────────
+    // Only emitted when PelletModeEnabled — a pellet screw has different pressure
+    // dynamics to a filament feeder. Each maps onto a real CuraEngine key.
+    bool   PelletModeEnabled              = false,
+    double PressureAdvanceFactor          = 0.05,   // material_pressure_advance_factor
+    double FlowRateCompensationFactorPct  = 100.0,  // flow_rate_extrusion_offset_factor
+    double FlowRateMaxExtrusionOffsetMm   = 0.0,    // flow_rate_max_extrusion_offset
+    double MaterialMaxFlowRateMm3S        = 16.0,   // material_max_flowrate
+    double FlowEqualizationRatioPct       = 100.0,  // speed_equalize_flow_width_factor
+    double InitialLayerFlowPct            = 100.0,  // material_flow_layer_0
+    double StandbyTemperatureDegC         = 150.0); // material_standby_temperature
 
 public sealed record SlicingResult(
     string GCodeFilePath,

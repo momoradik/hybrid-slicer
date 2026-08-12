@@ -20,7 +20,8 @@ public sealed record ImportStlCommand(
     bool GcodeHoming = true,
     bool GcodeLevelling = false,
     int? BedIndex = null,
-    Guid? ParentJobId = null) : IRequest<ImportStlResult>;
+    Guid? ParentJobId = null,
+    bool ApplyCustomGCodeBlocks = true) : IRequest<ImportStlResult>;
 
 public sealed record ImportStlResult(
     Guid JobId,

@@ -20,6 +20,22 @@ public sealed class CustomGCodeBlockRepository : ICustomGCodeBlockRepository
     public async Task<IReadOnlyList<CustomGCodeBlock>> GetEnabledAsync(CancellationToken ct = default)
         => await _db.CustomGCodeBlocks.Where(x => x.IsEnabled).OrderBy(x => x.SortOrder).ToListAsync(ct);
 
+    public async Task<IReadOnlyList<CustomGCodeBlock>> GetForMachineAsync(
+        Guid? machineProfileId, bool enabledOnly, CancellationToken ct = default)
+    {
+        var q = _db.CustomGCodeBlocks.AsQueryable();
+
+        // Shared blocks (null machine) always apply; machine-specific blocks only
+        // when the caller names that machine.
+        q = machineProfileId is null
+            ? q.Where(x => x.MachineProfileId == null)
+            : q.Where(x => x.MachineProfileId == null || x.MachineProfileId == machineProfileId);
+
+        if (enabledOnly) q = q.Where(x => x.IsEnabled);
+
+        return await q.OrderBy(x => x.SortOrder).ThenBy(x => x.Name).ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<CustomGCodeBlock>> GetByTriggerAsync(GCodeTrigger trigger, CancellationToken ct = default)
         => await _db.CustomGCodeBlocks.Where(x => x.IsEnabled && x.Trigger == trigger)
             .OrderBy(x => x.SortOrder).ToListAsync(ct);

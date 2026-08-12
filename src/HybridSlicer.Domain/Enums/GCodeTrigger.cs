@@ -8,6 +8,15 @@ public enum GCodeTrigger
     AfterPrinting = 3,
     JobStart = 4,
     JobEnd = 5,
+
+    /// <summary>
+    /// Fires on a layer cadence rather than at a phase boundary — e.g. every
+    /// 10th layer. The cadence itself lives on the block
+    /// (<see cref="Entities.CustomGCodeBlock.RepeatEveryNLayers"/>) together with
+    /// the optional first/last layer window.
+    /// </summary>
+    EveryNLayers = 6,
+
     // Per-extruder triggers (extruder index encoded in value: 100+N = before, 200+N = after)
     BeforeExtruder0 = 100,
     BeforeExtruder1 = 101,

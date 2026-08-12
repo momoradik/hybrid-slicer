@@ -92,7 +92,8 @@ public sealed class ImportStlHandler : IRequestHandler<ImportStlCommand, ImportS
             cmd.GcodeHoming,
             cmd.GcodeLevelling,
             cmd.BedIndex,
-            cmd.ParentJobId);
+            cmd.ParentJobId,
+            cmd.ApplyCustomGCodeBlocks);
 
         await _jobs.AddAsync(job, ct);
 

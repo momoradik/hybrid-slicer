@@ -7,6 +7,7 @@ export type MachineType = 'FDM' | 'CNC' | 'Hybrid'
 export type ToolType = 'FlatEndMill' | 'BallEndMill' | 'BullNoseEndMill' | 'DrillBit' | 'Engraver' | 'Facemill' | 'Custom'
 export type GCodeTrigger =
   | 'BeforeMachining' | 'AfterMachining' | 'BeforePrinting' | 'AfterPrinting' | 'JobStart' | 'JobEnd'
+  | 'EveryNLayers'
   | 'BeforeExtruder0' | 'BeforeExtruder1' | 'BeforeExtruder2' | 'BeforeExtruder3'
   | 'BeforeExtruder4' | 'BeforeExtruder5' | 'BeforeExtruder6' | 'BeforeExtruder7'
   | 'AfterExtruder0' | 'AfterExtruder1' | 'AfterExtruder2' | 'AfterExtruder3'
@@ -124,6 +125,14 @@ export interface PrintProfile {
   supportEnabled: boolean
   pelletModeEnabled: boolean
   virtualFilamentDiameterMm: number
+  // Pellet / high-flow tuning — each maps onto a real CuraEngine key
+  pressureAdvanceFactor: number          // material_pressure_advance_factor
+  flowRateCompensationFactorPct: number  // flow_rate_extrusion_offset_factor
+  flowRateMaxExtrusionOffsetMm: number   // flow_rate_max_extrusion_offset
+  materialMaxFlowRateMm3S: number        // material_max_flowrate
+  flowEqualizationRatioPct: number       // speed_equalize_flow_width_factor
+  initialLayerFlowPct: number            // material_flow_layer_0
+  standbyTemperatureDegC: number         // material_standby_temperature
   version: string
 }
 
@@ -169,6 +178,26 @@ export interface CustomGCodeBlock {
   description?: string
   isEnabled: boolean
   sortOrder: number
+  /** null = shared block, offered on every machine. */
+  machineProfileId?: string | null
+  /** Cadence for the EveryNLayers trigger; 0 for all other triggers. */
+  repeatEveryNLayers: number
+  /** First layer the cadence may fire on (1-based). */
+  startLayer: number
+  /** Last layer the cadence may fire on; null = to the end of the print. */
+  endLayer?: number | null
+}
+
+/** Error envelope returned by the API's GlobalExceptionMiddleware. */
+export interface ApiError {
+  code: string
+  message: string
+  title?: string
+  detail?: string
+  /** Name of the offending field, e.g. "layerHeightMm". */
+  field?: string | null
+  providedValue?: string | null
+  expected?: string | null
 }
 
 export interface BrandingSettings {

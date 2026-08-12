@@ -29,7 +29,7 @@ public sealed class GlobalExceptionMiddleware
                 "SAFETY_VIOLATION" => 422,
                 _ => 400
             };
-            await WriteJsonErrorAsync(context, ex.Code, ex.Message);
+            await WriteJsonErrorAsync(context, ex.Code, ex.Message, ex.Field, ex.ProvidedValue, ex.Expected);
         }
         catch (OperationCanceledException)
         {
@@ -43,10 +43,25 @@ public sealed class GlobalExceptionMiddleware
         }
     }
 
-    private static async Task WriteJsonErrorAsync(HttpContext context, string code, string message)
+    /// <summary>
+    /// Error envelope. <c>title</c> and <c>detail</c> duplicate <c>message</c> so the
+    /// payload also satisfies clients that read the ProblemDetails shape.
+    /// </summary>
+    private static async Task WriteJsonErrorAsync(
+        HttpContext context, string code, string message,
+        string? field = null, string? providedValue = null, string? expected = null)
     {
         context.Response.ContentType = "application/json";
-        var body = JsonSerializer.Serialize(new { code, message });
+        var body = JsonSerializer.Serialize(new
+        {
+            code,
+            message,
+            title = message,
+            detail = message,
+            field,
+            providedValue,
+            expected
+        });
         await context.Response.WriteAsync(body);
     }
 }

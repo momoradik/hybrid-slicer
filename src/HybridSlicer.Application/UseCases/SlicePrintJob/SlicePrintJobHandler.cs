@@ -1,6 +1,7 @@
 using System.Text;
 using HybridSlicer.Application.Interfaces;
 using HybridSlicer.Application.Interfaces.Repositories;
+using HybridSlicer.Domain.Entities;
 using HybridSlicer.Domain.Enums;
 using HybridSlicer.Domain.Exceptions;
 using MediatR;
@@ -125,18 +126,30 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
                 // Internal pipeline always uses bed-centre origin for STL viewer / preview consistency.
                 // OriginMode in the machine profile is for documentation and future firmware output.
                 OriginIsBedCenter:     true,
-                MaterialFlowPct:       profile.MaterialFlowPct);
+                MaterialFlowPct:       profile.MaterialFlowPct,
+                PelletModeEnabled:             profile.PelletModeEnabled,
+                PressureAdvanceFactor:         profile.PressureAdvanceFactor,
+                FlowRateCompensationFactorPct: profile.FlowRateCompensationFactorPct,
+                FlowRateMaxExtrusionOffsetMm:  profile.FlowRateMaxExtrusionOffsetMm,
+                MaterialMaxFlowRateMm3S:       profile.MaterialMaxFlowRateMm3S,
+                FlowEqualizationRatioPct:      profile.FlowEqualizationRatioPct,
+                InitialLayerFlowPct:           profile.InitialLayerFlowPct,
+                StandbyTemperatureDegC:        profile.StandbyTemperatureDegC);
 
             var result = await _slicer.SliceAsync(job.StlFilePath, parameters, ct);
 
             // Multi-extruder post-processing: insert tool changes, apply nozzle offsets,
             // and inject per-extruder custom G-code blocks. No-op for single-extruder.
-            var enabledBlocks = await _customGCode.GetEnabledAsync(ct);
+            // Only this machine's blocks (plus shared ones) apply, and only when the
+            // job opted in — see ApplyCustomGCodeBlocks on the import screen.
+            var enabledBlocks = job.ApplyCustomGCodeBlocks
+                ? await _customGCode.GetForMachineAsync(job.MachineProfileId, enabledOnly: true, ct)
+                : [];
             await _multiExtruder.ProcessAsync(result.GCodeFilePath, machine, enabledBlocks, ct);
 
             await ReplaceStartupGCodeAsync(result.GCodeFilePath, job.GcodeHoming, job.GcodeLevelling, parameters, ct);
             await InjectProgressMetadataAsync(result.GCodeFilePath, ct);
-            await InjectCustomGCodeAsync(result.GCodeFilePath, ct);
+            await InjectCustomGCodeAsync(result.GCodeFilePath, enabledBlocks, ct);
 
             // Final step: translate from bed-centre coordinates to real machine coordinates
             // using origin and bed position from the machine profile. No-op if origin = bed centre.
@@ -274,12 +287,18 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
         await File.WriteAllTextAsync(gcodePath, sb.ToString(), ct);
     }
 
-    private async Task InjectCustomGCodeAsync(string gcodePath, CancellationToken ct)
+    /// <summary>
+    /// Wraps the sliced G-code with the JobStart / JobEnd blocks from
+    /// <paramref name="applicableBlocks"/> — already filtered to this job's machine
+    /// and enabled state by the caller.
+    /// </summary>
+    private static async Task InjectCustomGCodeAsync(
+        string gcodePath, IReadOnlyList<CustomGCodeBlock> applicableBlocks, CancellationToken ct)
     {
-        var startBlocks = (await _customGCode.GetByTriggerAsync(GCodeTrigger.JobStart, ct))
-            .Where(b => b.IsEnabled).OrderBy(b => b.SortOrder).ToList();
-        var endBlocks = (await _customGCode.GetByTriggerAsync(GCodeTrigger.JobEnd, ct))
-            .Where(b => b.IsEnabled).OrderBy(b => b.SortOrder).ToList();
+        var startBlocks = applicableBlocks
+            .Where(b => b.Trigger == GCodeTrigger.JobStart).OrderBy(b => b.SortOrder).ToList();
+        var endBlocks = applicableBlocks
+            .Where(b => b.Trigger == GCodeTrigger.JobEnd).OrderBy(b => b.SortOrder).ToList();
 
         if (startBlocks.Count == 0 && endBlocks.Count == 0) return;
 

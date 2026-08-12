@@ -297,6 +297,21 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         sb.Append($" -s material_bed_temperature={p.BedTemperatureDegC}");
         sb.Append($" -s material_bed_temperature_layer_0={p.BedTemperatureDegC}");
 
+        // Pellet / high-flow tuning.
+        // Emitted only in pellet mode so filament profiles keep CuraEngine's own
+        // defaults. material_diameter is already carrying the virtual diameter
+        // (set upstream in SlicePrintJobHandler), which is what rescales E-values.
+        if (p.PelletModeEnabled)
+        {
+            sb.Append($" -s material_pressure_advance_factor={p.PressureAdvanceFactor.ToString("F4", ic)}");
+            sb.Append($" -s flow_rate_extrusion_offset_factor={p.FlowRateCompensationFactorPct.ToString("F2", ic)}");
+            sb.Append($" -s flow_rate_max_extrusion_offset={p.FlowRateMaxExtrusionOffsetMm.ToString("F3", ic)}");
+            sb.Append($" -s material_max_flowrate={p.MaterialMaxFlowRateMm3S.ToString("F2", ic)}");
+            sb.Append($" -s speed_equalize_flow_width_factor={p.FlowEqualizationRatioPct.ToString("F2", ic)}");
+            sb.Append($" -s material_flow_layer_0={p.InitialLayerFlowPct.ToString("F2", ic)}");
+            sb.Append($" -s material_standby_temperature={p.StandbyTemperatureDegC.ToString("F1", ic)}");
+        }
+
         // Retraction
         sb.Append($" -s retraction_amount={p.RetractLengthMm.ToString("F2", ic)}");
         sb.Append($" -s retraction_speed={p.RetractSpeedMmS.ToString("F1", ic)}");
