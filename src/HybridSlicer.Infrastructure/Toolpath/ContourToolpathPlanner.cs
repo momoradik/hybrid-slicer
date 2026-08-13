@@ -49,15 +49,22 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
         if (request.WallPaths.Count == 0)
             return new ToolpathResult(string.Empty, true, [], []);
 
-        // CRC offset: tool_radius + nozzle_radius
-        // Inner-wall sign FLIPPED — was −, now +. With the original − sign the
-        // toolpath came out LARGER than the hole; flipping it produces an
-        // inward toolpath that stays inside the cavity.
+        // CRC offset: tool_radius + nozzle_radius.
+        //
+        // Sign is what keeps the cutter out of solid material:
+        //   outer wall — the tool rides OUTSIDE the printed surface, so expand (+)
+        //   inner wall — the tool rides INSIDE the cavity, so erode (−)
+        //
+        // Both branches previously used +, which offset a pocket OUTWARD, i.e. into
+        // the part wall. A closed ring is built as a Polygon by BuildGeometry, so a
+        // negative buffer erodes it as intended; an open (unclosed) segment buffers to
+        // empty, which is then reported as ToolTooWide — the safe outcome, and the
+        // case the earlier "flip the sign" change appears to have been reacting to.
         var toolRadius   = request.ToolDiameterMm   / 2.0;
         var nozzleRadius = request.NozzleDiameterMm / 2.0;
         var crcOffset    = request.IsOuterWall
             ?  (toolRadius + nozzleRadius)   // outer wall — expand outward
-            :  (toolRadius + nozzleRadius);  // inner wall — also +; see above
+            : -(toolRadius + nozzleRadius);  // inner wall — erode inward
 
         var dx = request.MachineOffset.X;
         var dy = request.MachineOffset.Y;
