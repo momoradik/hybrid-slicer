@@ -67,9 +67,20 @@ public static class ServiceExtensions
         services.AddScoped<MultiBedMerger>();
 
         // Machine driver is Singleton so the connection persists across SignalR hub method calls
-        // and across HTTP requests. RepRapHttpDriver uses the HTTP rr_* API for RepRapFirmware.
-        // Switch to TcpMachineDriver here for Marlin/raw-TCP machines.
-        services.AddSingleton<IMachineDriver, RepRapHttpDriver>();
+        // and across HTTP requests.
+        //
+        // MachineDriverRouter owns whichever concrete driver matches the transport the
+        // user picked — RepRapHttpDriver for a network connection, RepRapSerialDriver
+        // for USB — so transport is a runtime choice rather than a DI-time one.
+        // Both target RepRapFirmware; other firmwares would slot in the same way.
+        services.AddTransient<RepRapHttpDriver>();
+        services.AddTransient<RepRapSerialDriver>();
+        services.AddSingleton<Func<RepRapHttpDriver>>(sp => sp.GetRequiredService<RepRapHttpDriver>);
+        services.AddSingleton<Func<RepRapSerialDriver>>(sp => sp.GetRequiredService<RepRapSerialDriver>);
+
+        services.AddSingleton<MachineDriverRouter>();
+        services.AddSingleton<IMachineDriver>(sp => sp.GetRequiredService<MachineDriverRouter>());
+        services.AddSingleton<IMachineConnectionManager>(sp => sp.GetRequiredService<MachineDriverRouter>());
 
         return services;
     }

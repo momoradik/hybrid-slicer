@@ -10,27 +10,47 @@ namespace HybridSlicer.Api.Hubs;
 public sealed class MachineHub : Hub
 {
     private readonly IMachineDriver _driver;
+    private readonly IMachineConnectionManager _connection;
     private readonly ILogger<MachineHub> _logger;
 
-    public MachineHub(IMachineDriver driver, ILogger<MachineHub> logger)
+    public MachineHub(
+        IMachineDriver driver,
+        IMachineConnectionManager connection,
+        ILogger<MachineHub> logger)
     {
         _driver = driver;
+        _connection = connection;
         _logger = logger;
     }
 
-    /// <summary>Connect to a RepRapFirmware (or other) machine. Password is optional.</summary>
+    /// <summary>
+    /// Connect to a RepRapFirmware board over the network. The board's link —
+    /// Ethernet cable or Wi-Fi — makes no difference; both give it an IP address.
+    /// Password is optional.
+    /// </summary>
     public async Task Connect(string host, int port, string? password = null)
     {
-        _logger.LogInformation("Hub: Connect {Host}:{Port}", host, port);
-        await _driver.ConnectAsync(host, port, password, Context.ConnectionAborted);
-        await Clients.Caller.SendAsync("Connected", new { host, port });
+        _logger.LogInformation("Hub: Connect (network) {Host}:{Port}", host, port);
+        await _connection.ConnectNetworkAsync(host, port, password, Context.ConnectionAborted);
+        await Clients.Caller.SendAsync("Connected", _connection.Status);
+    }
+
+    /// <summary>Connect to a RepRapFirmware board over USB, as a virtual COM port.</summary>
+    public async Task ConnectSerial(string portName, int baudRate)
+    {
+        _logger.LogInformation("Hub: Connect (serial) {Port} @ {Baud}", portName, baudRate);
+        await _connection.ConnectSerialAsync(portName, baudRate <= 0 ? 115200 : baudRate, Context.ConnectionAborted);
+        await Clients.Caller.SendAsync("Connected", _connection.Status);
     }
 
     public async Task Disconnect()
     {
-        await _driver.DisconnectAsync();
+        await _connection.DisconnectAsync();
         await Clients.Caller.SendAsync("Disconnected");
     }
+
+    /// <summary>Current link state, so a client that joins late can render the right thing.</summary>
+    public MachineConnectionStatus GetStatus() => _connection.Status;
 
     public async Task SendManualCommand(string gcode)
     {
