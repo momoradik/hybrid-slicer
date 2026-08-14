@@ -35,6 +35,15 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
 
+[InstallDelete]
+; [Files] only adds and overwrites — it never removes files that a previous version
+; installed and this one no longer ships. The web bundles are content-hashed, so every
+; release leaves its predecessor behind: installs were accumulating orphaned
+; index-*.js/css going back months. A browser holding a stale index.html could then
+; still resolve the old bundle and keep showing an old UI indefinitely.
+; Wipe the web assets before copying so the install always matches the release exactly.
+Type: filesandordirs; Name: "{app}\wwwroot\assets"
+
 [Files]
 Source: "..\publish\app\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "app-icon.ico"; DestDir: "{app}"; Flags: ignoreversion

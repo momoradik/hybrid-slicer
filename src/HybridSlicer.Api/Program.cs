@@ -137,21 +137,44 @@ try
     app.UseSerilogRequestLogging();
     app.UseCors();
 
-    // Serve the built React SPA (placed in wwwroot by Vite build)
-    // HTML files must not be cached so the browser always picks up new hashed asset filenames
-    app.UseStaticFiles(new StaticFileOptions
+    // Serve the built React SPA (placed in wwwroot by the Vite build).
+    //
+    // index.html must never be cached: it is the only thing naming the hashed asset
+    // bundles, so a stale copy pins the app to an old build forever. The hashed
+    // assets themselves are immutable — their name changes whenever the content
+    // does — so they can be cached hard.
+    //
+    // These options are shared with MapFallbackToFile below. That matters: the
+    // fallback does NOT inherit the options given to UseStaticFiles, so previously
+    // "/" and deep links such as "/printer" — i.e. every URL a user actually opens —
+    // were served with no Cache-Control at all and were free to be heuristically
+    // cached, while only the literal "/index.html" got the no-store header.
+    var spaFileOptions = new StaticFileOptions
     {
         OnPrepareResponse = ctx =>
         {
+            var headers = ctx.Context.Response.Headers;
+
             if (ctx.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
-                ctx.Context.Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
+            {
+                headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
+                headers["Pragma"] = "no-cache";
+                headers["Expires"] = "0";
+            }
+            else if (ctx.Context.Request.Path.StartsWithSegments("/assets"))
+            {
+                // Content-hashed filenames — safe to keep for a year.
+                headers["Cache-Control"] = "public, max-age=31536000, immutable";
+            }
         }
-    });
+    };
+
+    app.UseStaticFiles(spaFileOptions);
 
     app.UseAuthorization();
     app.MapControllers();
     app.MapHub<MachineHub>("/hubs/machine");
-    app.MapFallbackToFile("index.html");
+    app.MapFallbackToFile("index.html", spaFileOptions);
 
     Log.Information("HybridSlicer API ready");
     await app.RunAsync();
