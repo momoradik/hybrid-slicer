@@ -53,3 +53,6 @@ update-token.txt
 # Build artifacts
 publish/
 screenshot*.png
+
+# Local scratch test scripts (kept on disk, not part of the repo)
+.test*.mjs
