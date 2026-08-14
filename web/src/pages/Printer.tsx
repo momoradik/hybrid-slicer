@@ -8,8 +8,12 @@ import PrinterConsole from './printer/PrinterConsole'
 import PrinterHeightMap from './printer/PrinterHeightMap'
 import PrinterJobFiles from './printer/PrinterJobFiles'
 import PrinterSettings from './printer/PrinterSettings'
+import PrinterConnection from './printer/PrinterConnection'
+import { machineConnectionApi } from '../api/client'
+import { useQuery } from '@tanstack/react-query'
 
 const TABS = [
+  { id: 'connection', label: 'Connection' },
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'control',   label: 'Control' },
   { id: 'console',   label: 'Console' },
@@ -18,13 +22,23 @@ const TABS = [
   { id: 'settings',  label: 'Settings' },
 ] as const
 
+/** Tabs that need the board's HTTP file endpoints, which USB cannot provide. */
+const NEEDS_FILE_TRANSFER: readonly string[] = ['heightmap', 'files']
+
 type TabId = (typeof TABS)[number]['id']
 
 export default function Printer() {
   const machineConnected = useAppStore(s => s.machineConnected)
-  const [activeTab, setActiveTab] = useState<TabId>('dashboard')
+  const [activeTab, setActiveTab] = useState<TabId>('connection')
   const { setModel, pushTempSample, polling, setPolling } = useDuetStore()
   const pollRef = useRef<ReturnType<typeof setInterval>>()
+
+  // Drives the connected/disconnected badge and the USB capability gate below.
+  const { data: connection } = useQuery({
+    queryKey: ['machine-connection'],
+    queryFn: machineConnectionApi.getStatus,
+    refetchInterval: 4000,
+  })
 
   const pollStatus = useCallback(async () => {
     try {
@@ -52,17 +66,51 @@ export default function Printer() {
     }
   }, [machineConnected]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!machineConnected) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-gray-500 space-y-4 py-20">
-        <div className="text-6xl">🖨️</div>
-        <p className="text-lg">Printer not connected</p>
-        <p className="text-sm text-gray-600">Go to <span className="text-primary-300">Calibration</span> to connect to your Duet board first.</p>
-      </div>
-    )
-  }
-
   const renderTab = () => {
+    // Connecting lives here, in the Printer section, and stays reachable while
+    // connected so the link can be inspected or dropped.
+    if (activeTab === 'connection') return <PrinterConnection />
+
+    if (!machineConnected) {
+      return (
+        <div className="flex flex-col items-center justify-center text-gray-500 space-y-4 py-20">
+          <div className="text-6xl">🖨️</div>
+          <p className="text-lg">Printer not connected</p>
+          <p className="text-sm text-gray-600">
+            Open the <span className="text-primary-300">Connection</span> tab to connect by
+            IP address or USB.
+          </p>
+          <button
+            onClick={() => setActiveTab('connection')}
+            className="px-4 py-2 bg-primary/80 hover:bg-primary text-white rounded-lg text-sm"
+          >
+            Go to Connection
+          </button>
+        </div>
+      )
+    }
+
+    // Over USB the board's file endpoints are unavailable; say so rather than
+    // letting the panel fail with a raw error.
+    if (NEEDS_FILE_TRANSFER.includes(activeTab) && connection && !connection.supportsFileTransfer) {
+      return (
+        <div className="flex flex-col items-center justify-center text-gray-500 space-y-3 py-20 text-center px-6">
+          <div className="text-5xl">🔌</div>
+          <p className="text-lg text-gray-300">Not available over USB</p>
+          <p className="text-sm text-gray-500 max-w-md">
+            This tab needs the board's HTTP file interface (file listing, upload and download),
+            which RepRapFirmware only serves over the network. Connect by IP address to use it.
+          </p>
+          <button
+            onClick={() => setActiveTab('connection')}
+            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 rounded-lg text-sm"
+          >
+            Change connection
+          </button>
+        </div>
+      )
+    }
+
     switch (activeTab) {
       case 'dashboard': return <PrinterDashboard />
       case 'control':   return <PrinterControl />
@@ -88,6 +136,11 @@ export default function Printer() {
             }`}
           >
             {tab.label}
+            {tab.id === 'connection' && (
+              <span className={`ml-2 inline-block w-1.5 h-1.5 rounded-full align-middle ${
+                machineConnected ? 'bg-green-400' : 'bg-gray-600'
+              }`} />
+            )}
           </button>
         ))}
       </div>

@@ -101,6 +101,45 @@ export const jobsApi = {
   deleteJob: (id: string) => http.delete(`/jobs/${id}`),
 }
 
+// ── Machine connection (printer link) ─────────────────────────────────────
+export type MachineTransport = 'Network' | 'Serial'
+
+export interface MachineConnectionStatus {
+  isConnected: boolean
+  transport: MachineTransport | null
+  /** "192.168.1.20" for network, "COM3 @ 115200" for serial. */
+  endpoint: string | null
+  firmwareDescription: string | null
+  /** False over USB — RepRapFirmware serves file endpoints over HTTP only. */
+  supportsFileTransfer: boolean
+}
+
+export interface FirmwareOption {
+  id: string
+  name: string
+  supported: boolean
+  note: string
+}
+
+export interface ConnectRequest {
+  transport: MachineTransport
+  firmware: string
+  host?: string
+  port?: number
+  password?: string
+  portName?: string
+  baudRate?: number
+}
+
+export const machineConnectionApi = {
+  getStatus: () => http.get<MachineConnectionStatus>('/machine/connection').then(r => r.data),
+  getSerialPorts: () => http.get<{ ports: string[] }>('/machine/serial-ports').then(r => r.data.ports),
+  getFirmwares: () => http.get<{ firmwares: FirmwareOption[] }>('/machine/firmwares').then(r => r.data.firmwares),
+  connect: (req: ConnectRequest) =>
+    http.post<MachineConnectionStatus>('/machine/connect', req).then(r => r.data),
+  disconnect: () => http.post<MachineConnectionStatus>('/machine/disconnect').then(r => r.data),
+}
+
 // ── Custom G-code Blocks ──────────────────────────────────────────────────
 export const customGCodeApi = {
   /** Omit machineProfileId for every block; pass one for that machine's blocks + the shared ones. */

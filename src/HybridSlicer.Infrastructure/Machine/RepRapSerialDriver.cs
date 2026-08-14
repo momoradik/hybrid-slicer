@@ -272,7 +272,22 @@ public sealed class RepRapSerialDriver : IMachineDriver
         var port = _port ?? throw new InvalidOperationException("Serial port is not open.");
 
         port.DiscardInBuffer();
-        port.WriteLine(command);
+
+        try
+        {
+            port.WriteLine(command);
+        }
+        catch (TimeoutException ex)
+        {
+            // The port opened but the write never drained — the device on the other
+            // end isn't reading. Typically a COM port belonging to something that is
+            // not the printer (Bluetooth, a modem, a virtual port), or a cable that
+            // carries power but no data. Surface that instead of a bare timeout.
+            throw new IOException(
+                $"{port.PortName} accepted the connection but did not respond. " +
+                "That port is probably not the printer, or the USB cable is charge-only. " +
+                "Pick a different port, or use a data-capable cable.", ex);
+        }
 
         var sb = new StringBuilder();
         var deadline = DateTime.UtcNow.AddMilliseconds(ReplyTimeoutMs);
