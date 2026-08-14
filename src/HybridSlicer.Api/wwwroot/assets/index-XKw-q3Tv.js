@@ -92,11 +92,19 @@ This will permanently remove the job and all generated files (STL, G-code).`)&&e
           px-3 py-1.5 rounded-lg text-xs leading-snug text-gray-200 bg-gray-800 border border-gray-600\r
           whitespace-normal max-w-xs text-center shadow-lg\r
           opacity-0 group-hover:opacity-100 transition-opacity duration-150\r
+<<<<<<<< HEAD:src/HybridSlicer.Api/wwwroot/assets/index-XKw-q3Tv.js
         `,children:[e,c.jsx("div",{className:"absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-gray-600"})]})]}):c.jsx(c.Fragment,{children:n})}function Bs({text:t,cura:e,side:n="top",children:r}){const i=n==="top"?"bottom-full mb-2":"top-full mt-2",s=n==="top"?"top-full -mt-px border-t-gray-600":"bottom-full -mb-px border-b-gray-600";return c.jsxs("span",{className:"relative group inline-flex items-center align-middle",children:[r??c.jsx("span",{tabIndex:0,"aria-label":t,className:`
             inline-flex items-center justify-center w-3.5 h-3.5 rounded-full
             border border-gray-600 text-gray-500 text-[9px] font-semibold leading-none
             cursor-help select-none hover:border-gray-400 hover:text-gray-300
             focus:outline-none focus:border-primary focus:text-primary transition-colors
+========
+        `,children:[e,c.jsx("div",{className:"absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-gray-600"})]})]}):c.jsx(c.Fragment,{children:n})}function ma({text:t,cura:e,side:n="top",children:r}){const i=n==="top"?"bottom-full mb-2":"top-full mt-2",s=n==="top"?"top-full -mt-px border-t-gray-600":"bottom-full -mb-px border-b-gray-600";return c.jsxs("span",{className:"relative group inline-flex items-center align-middle",children:[r??c.jsx("span",{tabIndex:0,"aria-label":t,className:`\r
+            inline-flex items-center justify-center w-3.5 h-3.5 rounded-full\r
+            border border-gray-600 text-gray-500 text-[9px] font-semibold leading-none\r
+            cursor-help select-none hover:border-gray-400 hover:text-gray-300\r
+            focus:outline-none focus:border-primary focus:text-primary transition-colors\r
+>>>>>>>> origin/probe-plugin:src/HybridSlicer.Api/wwwroot/assets/index-wh0wX5-m.js
           `,children:"i"}),c.jsxs("span",{role:"tooltip",className:`
           pointer-events-none absolute z-50 left-1/2 -translate-x-1/2 ${i}
           px-3 py-2 rounded-lg text-xs leading-snug text-gray-200
