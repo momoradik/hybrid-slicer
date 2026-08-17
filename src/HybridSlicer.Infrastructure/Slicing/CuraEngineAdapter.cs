@@ -210,7 +210,15 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         sb.Append($" -s infill_pattern={p.InfillPattern}");
 
         sb.Append($" -s material_print_temperature={p.PrintTemperatureDegC}");
+        sb.Append($" -s material_print_temperature_layer_0={p.PrintTemperatureDegC}");
         sb.Append($" -s material_bed_temperature={p.BedTemperatureDegC}");
+        sb.Append($" -s material_bed_temperature_layer_0={p.BedTemperatureDegC}");
+        sb.Append($" -s material_diameter={p.FilamentDiameterMm.ToString("F2", ic)}");
+        sb.Append($" -s material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        sb.Append($" -s retraction_enable={p.RetractionEnabled.ToString().ToLowerInvariant()}");
+        sb.Append($" -s retraction_amount={p.RetractLengthMm.ToString("F2", ic)}");
+        sb.Append($" -s retraction_speed={p.RetractSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s retraction_min_travel={p.RetractMinTravelMm.ToString("F2", ic)}");
         sb.Append($" -s support_enable={p.SupportEnabled.ToString().ToLowerInvariant()}");
         if (p.SupportEnabled)
         {

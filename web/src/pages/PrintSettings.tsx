@@ -201,7 +201,6 @@ export default function PrintSettings() {
               <Chip color="blue">LH {p.layerHeightMm} mm</Chip>
               <Chip color="orange">{p.printSpeedMmS} mm/s</Chip>
               <Chip color="green">Flow {p.materialFlowPct}%</Chip>
-              <Chip color="gray">{p.printTemperatureDegC}°C</Chip>
               {p.pelletModeEnabled && <Chip color="amber">Pellet Mode</Chip>}
             </div>
           </div>
@@ -519,16 +518,8 @@ export default function PrintSettings() {
                     </div>
                   </Section>
 
-                  <Section title="Temperature & Cooling">
+                  <Section title="Cooling">
                     <div className="grid grid-cols-3 gap-4">
-                      <F label="Print Temp (°C)" tip="Nozzle temperature during printing. Match it to your material.">
-                        <NumIn value={draft.printTemperatureDegC ?? 210} min={150} max={350}
-                          onChange={v => set('printTemperatureDegC', v)} />
-                      </F>
-                      <F label="Bed Temp (°C)" tip="Heated bed temperature. Helps first-layer adhesion and reduces warping.">
-                        <NumIn value={draft.bedTemperatureDegC ?? 60} min={0} max={150}
-                          onChange={v => set('bedTemperatureDegC', v)} />
-                      </F>
                       <F label="Fan Speed (%)" tip="Part-cooling fan speed. High for PLA, low or off for ABS and most pellets.">
                         <WithAuto onAuto={() => applyAuto('coolingFanSpeedPct')}>
                           <NumIn value={draft.coolingFanSpeedPct ?? 100} min={0} max={100}

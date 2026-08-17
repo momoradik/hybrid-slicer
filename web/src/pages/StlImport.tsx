@@ -344,6 +344,7 @@ export default function StlImport() {
   const selectedModel   = models.find(m => m.id === selectedId) ?? null
   const selectedMachine = machines.find(m => m.id === machineId)
   const selectedProfile = profiles.find(p => p.id === profileId)
+  const selectedMaterial = materials.find(m => m.id === materialId)
   const isHybrid = selectedMachine?.type === 'Hybrid'
   const selectedCncTool = cncTools.find(t => t.id === cncToolId)
 
@@ -1000,9 +1001,11 @@ export default function StlImport() {
                 <span className="bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-gray-400">
                   Flow {selectedProfile.materialFlowPct ?? 100}%
                 </span>
-                <span className="bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-gray-400">
-                  {selectedProfile.printTemperatureDegC}°C / {selectedProfile.bedTemperatureDegC}°C
-                </span>
+                {selectedMaterial && (
+                  <span className="bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-gray-400">
+                    {selectedMaterial.printTempMaxDegC}°C / {selectedMaterial.bedTempMaxDegC}°C
+                  </span>
+                )}
               </>
             )}
           </div>

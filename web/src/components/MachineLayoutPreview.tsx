@@ -191,8 +191,9 @@ export default function MachineLayoutPreview({
       const nd = Math.max(10, Math.min(travelY - bedPositionY, d.startMmY - dyMm))
       onBedSizeChange(Math.round(nw * 10) / 10, Math.round(nd * 10) / 10)
     } else if (d.type === 'cnc' && onCncOffsetChange) {
-      const newY = d.startMmX + dxMm
-      const newX = d.startMmY + dyMm
+      // Machine X = SVG horizontal (dxMm), Machine Y = SVG vertical (dyMm)
+      const newX = d.startMmX + dxMm
+      const newY = d.startMmY + dyMm
       onCncOffsetChange(Math.round(newX * 10) / 10, Math.round(newY * 10) / 10)
     } else if (d.type === 'origin' && onOriginChange) {
       const nx = Math.max(0, Math.min(travelX, d.startMmX + dxMm))
@@ -424,14 +425,13 @@ export default function MachineLayoutPreview({
         {/* ── CNC spindle (hybrid only, relative to E1) ── */}
         {isHybrid && extSvg.length > 0 && (() => {
           const e1 = extSvg[0]
-          const cncX = cncOffsetY ?? 0 // CNC Y offset → SVG horizontal (same mapping as nozzles)
-          const cncXmm = cncOffsetX ?? 0 // CNC X offset → SVG vertical (inverted)
-          const cncSvgX = e1.x + cncX * (bedSvgW / (bedWidth || 1))
-          const cncSvgY = e1.y - cncXmm * (bedSvgH / (bedDepth || 1))
+          // Machine X = SVG horizontal, Machine Y = SVG vertical (inverted)
+          const cncSvgX = e1.x + (cncOffsetX ?? 0) * scale
+          const cncSvgY = e1.y - (cncOffsetY ?? 0) * scale
           return (
             <g style={{ cursor: onCncOffsetChange ? 'grab' : 'default' }}
               onPointerDown={onCncOffsetChange
-                ? e => onPointerDown(e, 'cnc', cncOffsetY ?? 0, cncOffsetX ?? 0)
+                ? e => onPointerDown(e, 'cnc', cncOffsetX ?? 0, cncOffsetY ?? 0)
                 : undefined}>
               {/* Dashed line from E1 to CNC */}
               <line x1={e1.x} y1={e1.y} x2={cncSvgX} y2={cncSvgY}
