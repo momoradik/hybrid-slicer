@@ -494,8 +494,8 @@ function MachineConfigInner() {
                 originX={form.originXMm}
                 originY={form.originYMm}
                 isHybrid={form.type === 'Hybrid'}
-                cncOffsetX={form.cncOffsetX}
-                cncOffsetY={form.cncOffsetY}
+                cncOffsetX={form.cncOffsetY}
+                cncOffsetY={form.cncOffsetX}
                 onBedPositionChange={(x, y) => setForm(f => f ? { ...f, bedPositionXMm: x, bedPositionYMm: y } : f)}
                 onBedSizeChange={(w, d) => setForm(f => f ? { ...f, bedWidthMm: w, bedDepthMm: d } : f)}
                 onBedChange={(bi, x, y, w, d) => setForm(f => {
@@ -513,7 +513,7 @@ function MachineConfigInner() {
                 onExtruder1PositionChange={(front, left) => setForm(f =>
                   f ? { ...f, frontBedEdgeOffsetMm: front, leftBedEdgeOffsetMm: left } : f)}
                 onOriginChange={(x, y) => setForm(f => f ? { ...f, originXMm: x, originYMm: y } : f)}
-                onCncOffsetChange={(x, y) => setForm(f => f ? { ...f, cncOffsetX: x, cncOffsetY: y } : f)}
+                onCncOffsetChange={(x, y) => setForm(f => f ? { ...f, cncOffsetX: y, cncOffsetY: x } : f)}
               />
 
               {/* Nozzle Spacing (only when > 1 extruder) */}
