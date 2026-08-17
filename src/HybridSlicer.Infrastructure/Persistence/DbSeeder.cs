@@ -82,21 +82,30 @@ public static class DbSeeder
         {
             PrintProfile.Create("Standard — 0.2 mm")
                 .WithLayerHeight(0.2)
+                .WithLineWidth(0.4)
+                .WithWallCount(3)
                 .WithSpeeds(50, 150, 70, 30, 20)
                 .WithTemperatures(210, 60)
-                .WithInfill(20, "grid"),
+                .WithInfill(20, "grid")
+                .WithCooling(true, 100),
 
             PrintProfile.Create("Quality — 0.1 mm")
                 .WithLayerHeight(0.1)
+                .WithLineWidth(0.35)
+                .WithWallCount(4)
                 .WithSpeeds(35, 120, 50, 20, 15)
                 .WithTemperatures(205, 60)
-                .WithInfill(25, "grid"),
+                .WithInfill(25, "grid")
+                .WithCooling(true, 100),
 
             PrintProfile.Create("Draft — 0.3 mm")
                 .WithLayerHeight(0.3)
+                .WithLineWidth(0.5)
+                .WithWallCount(2)
                 .WithSpeeds(70, 180, 90, 40, 25)
                 .WithTemperatures(215, 60)
-                .WithInfill(15, "lines"),
+                .WithInfill(15, "lines")
+                .WithCooling(true, 100),
         };
 
         await db.PrintProfiles.AddRangeAsync(profiles);
