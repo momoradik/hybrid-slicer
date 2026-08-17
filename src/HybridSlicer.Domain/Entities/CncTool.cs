@@ -73,6 +73,31 @@ public class CncTool
         };
     }
 
+    public void Update(
+        string name, ToolType type, double diameterMm, double fluteLengthMm,
+        double shankDiameterMm, int fluteCount, string toolMaterial,
+        double maxDepthOfCutMm, int recommendedRpm, double recommendedFeedMmPerMin,
+        double toolLengthMm)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new DomainException("INVALID_NAME", "Tool name must not be empty.");
+        if (diameterMm <= 0)
+            throw new DomainException("INVALID_DIAMETER", "Tool diameter must be positive.");
+
+        Name = name.Trim();
+        Type = type;
+        DiameterMm = diameterMm;
+        FluteLengthMm = fluteLengthMm;
+        ToolLengthMm = toolLengthMm > 0 ? toolLengthMm : 50.0;
+        ShankDiameterMm = shankDiameterMm;
+        FluteCount = fluteCount;
+        ToolMaterial = toolMaterial;
+        MaxDepthOfCutMm = maxDepthOfCutMm > 0 ? maxDepthOfCutMm : diameterMm * 0.25;
+        RecommendedRpm = recommendedRpm;
+        RecommendedFeedMmPerMin = recommendedFeedMmPerMin;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public void UpdateCuttingParameters(int rpm, double feedMmPerMin, double maxDocMm)
     {
         if (rpm <= 0) throw new DomainException("INVALID_RPM", "RPM must be positive.");

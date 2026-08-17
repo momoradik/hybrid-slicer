@@ -420,7 +420,7 @@ export default function Calibration() {
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition ${
               tab === t.key
-                ? 'bg-primary/20 text-primary-300 border border-primary/30'
+                ? 'bg-primary/20 text-primary/70 border border-primary/30'
                 : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800 border border-transparent'
             }`}>
             {t.label}

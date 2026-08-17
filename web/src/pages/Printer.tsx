@@ -77,7 +77,7 @@ export default function Printer() {
           <div className="text-6xl">🖨️</div>
           <p className="text-lg">Printer not connected</p>
           <p className="text-sm text-gray-600">
-            Open the <span className="text-primary-300">Connection</span> tab to connect by
+            Open the <span className="text-primary/70">Connection</span> tab to connect by
             IP address or USB.
           </p>
           <button
@@ -131,7 +131,7 @@ export default function Printer() {
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === tab.id
-                ? 'border-primary-400 text-primary-300'
+                ? 'border-primary/80 text-primary/70'
                 : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-600'
             }`}
           >

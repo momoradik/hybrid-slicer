@@ -251,7 +251,7 @@ export default function PrinterJobFiles() {
             onClick={() => setSection(id)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ${
               section === id
-                ? 'border-primary-400 text-primary-300'
+                ? 'border-primary/80 text-primary/70'
                 : 'border-transparent text-gray-500 hover:text-gray-300'
             }`}
           >
@@ -271,7 +271,7 @@ export default function PrinterJobFiles() {
               {i > 0 && <span className="text-gray-600">/</span>}
               <button
                 onClick={() => navigateTo(crumb.path)}
-                className={`hover:text-primary-300 ${i === breadcrumbs().length - 1 ? 'text-white' : 'text-gray-400'}`}
+                className={`hover:text-primary/70 ${i === breadcrumbs().length - 1 ? 'text-white' : 'text-gray-400'}`}
               >
                 {crumb.label}
               </button>

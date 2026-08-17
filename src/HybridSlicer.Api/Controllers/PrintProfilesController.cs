@@ -28,6 +28,8 @@ public sealed class PrintProfilesController : ControllerBase
     {
         var profile = PrintProfile.Create(req.Name)
             .WithLayerHeight(req.LayerHeightMm)
+            .WithLineWidth(req.LineWidthMm)
+            .WithWallCount(req.WallCount)
             .WithSpeeds(req.PrintSpeedMmS, req.TravelSpeedMmS,
                         req.InfillSpeedMmS, req.WallSpeedMmS, req.FirstLayerSpeedMmS)
             .WithTemperatures(req.PrintTemperatureDegC, req.BedTemperatureDegC)
@@ -39,10 +41,12 @@ public sealed class PrintProfilesController : ControllerBase
             .WithTopBottomSpeed(req.TopBottomSpeedMmS)
             .WithRetraction(req.RetractionEnabled, req.RetractLengthMm, req.RetractSpeedMmS, req.RetractMinTravelMm)
             .WithTopBottomLayers(req.TopLayers, req.BottomLayers)
+            .WithCooling(req.CoolingEnabled, req.CoolingFanSpeedPct)
             .WithCoolingLimits(req.MinLayerTimeSec, req.MinSpeedMmS)
             .WithMotionControl(req.AccelerationControlEnabled, req.JerkControlEnabled)
             .WithSkinMonotonic(req.SkinMonotonic)
             .WithFirstLayerTravelSpeed(req.FirstLayerTravelSpeedMmS)
+            .WithFilamentDiameter(req.FilamentDiameterMm)
             .WithPelletMode(req.PelletModeEnabled, req.VirtualFilamentDiameterMm)
             .WithPelletTuning(
                 req.PressureAdvanceFactor,
@@ -66,6 +70,8 @@ public sealed class PrintProfilesController : ControllerBase
 
         profile
             .WithLayerHeight(req.LayerHeightMm)
+            .WithLineWidth(req.LineWidthMm)
+            .WithWallCount(req.WallCount)
             .WithSpeeds(req.PrintSpeedMmS, req.TravelSpeedMmS,
                         req.InfillSpeedMmS, req.WallSpeedMmS, req.FirstLayerSpeedMmS)
             .WithTemperatures(req.PrintTemperatureDegC, req.BedTemperatureDegC)
@@ -77,10 +83,12 @@ public sealed class PrintProfilesController : ControllerBase
             .WithTopBottomSpeed(req.TopBottomSpeedMmS)
             .WithRetraction(req.RetractionEnabled, req.RetractLengthMm, req.RetractSpeedMmS, req.RetractMinTravelMm)
             .WithTopBottomLayers(req.TopLayers, req.BottomLayers)
+            .WithCooling(req.CoolingEnabled, req.CoolingFanSpeedPct)
             .WithCoolingLimits(req.MinLayerTimeSec, req.MinSpeedMmS)
             .WithMotionControl(req.AccelerationControlEnabled, req.JerkControlEnabled)
             .WithSkinMonotonic(req.SkinMonotonic)
             .WithFirstLayerTravelSpeed(req.FirstLayerTravelSpeedMmS)
+            .WithFilamentDiameter(req.FilamentDiameterMm)
             .WithPelletMode(req.PelletModeEnabled, req.VirtualFilamentDiameterMm)
             .WithPelletTuning(
                 req.PressureAdvanceFactor,

@@ -30,7 +30,7 @@ export default function Sidebar() {
   return (
     <nav className="w-56 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
       <div className="px-4 py-5 border-b border-gray-800">
-        <h1 className="text-lg font-bold text-primary-400 truncate">
+        <h1 className="text-lg font-bold text-primary/80 truncate">
           {branding?.appTitle ?? 'HybridSlicer'}
         </h1>
         {branding?.companyName && (
@@ -46,7 +46,7 @@ export default function Sidebar() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors rounded-md mx-2 ` +
                 (isActive
-                  ? 'bg-primary/20 text-primary-300 font-medium'
+                  ? 'bg-primary/20 text-primary/70 font-medium'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800')
               }
             >
@@ -63,7 +63,7 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors rounded-md mx-2 ` +
               (isActive
-                ? 'bg-primary/20 text-primary-300 font-medium'
+                ? 'bg-primary/20 text-primary/70 font-medium'
                 : machineConnected
                 ? 'text-green-400 hover:text-green-300 hover:bg-gray-800'
                 : 'text-gray-600 hover:text-gray-400 hover:bg-gray-800')

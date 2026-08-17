@@ -64,7 +64,7 @@ function GeneralSettings() {
                   <>
                     <div className="w-full bg-gray-800 rounded-full h-1.5">
                       <div
-                        className="bg-primary-400 h-1.5 rounded-full"
+                        className="bg-primary/80 h-1.5 rounded-full"
                         style={{ width: `${((vol.totalSpace - vol.freeSpace) / vol.totalSpace) * 100}%` }}
                       />
                     </div>
@@ -157,7 +157,7 @@ function MachineSettings() {
                 key={f}
                 onClick={() => loadFile(f)}
                 className={`w-full text-left px-2 py-1.5 rounded text-xs font-mono transition ${
-                  activeFile === f ? 'bg-primary/20 text-primary-300' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                  activeFile === f ? 'bg-primary/20 text-primary/70' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
                 }`}
               >
                 {f}
@@ -322,7 +322,7 @@ export default function PrinterSettings() {
             onClick={() => setSection(id)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ${
               section === id
-                ? 'border-primary-400 text-primary-300'
+                ? 'border-primary/80 text-primary/70'
                 : 'border-transparent text-gray-500 hover:text-gray-300'
             }`}
           >

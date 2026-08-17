@@ -42,7 +42,7 @@ function AxisJogControls() {
               onClick={() => setStep(s)}
               className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
                 step === s
-                  ? 'bg-primary-500/20 text-primary-300 border border-primary-500/40 shadow-sm shadow-primary-500/10'
+                  ? 'bg-primary/20 text-primary/70 border border-primary/40 shadow-sm shadow-primary/10'
                   : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700 hover:text-gray-200'
               }`}
             >
@@ -131,7 +131,7 @@ function ExtruderControls() {
                 onClick={() => selectTool(t.number)}
                 className={`px-3 py-2 rounded-xl text-xs font-semibold transition ${
                   currentTool === t.number
-                    ? 'bg-primary-500/20 text-primary-300 border border-primary-500/40'
+                    ? 'bg-primary/20 text-primary/70 border border-primary/40'
                     : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700'
                 }`}
               >
@@ -158,7 +158,7 @@ function ExtruderControls() {
           {[1, 5, 10, 20, 50, 100].map(a => (
             <button key={a} onClick={() => setAmount(a)}
               className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
-                amount === a ? 'bg-primary-500/20 text-primary-300 border border-primary-500/40' : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700'
+                amount === a ? 'bg-primary/20 text-primary/70 border border-primary/40' : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700'
               }`}>{a}</button>
           ))}
         </div>
@@ -170,7 +170,7 @@ function ExtruderControls() {
           {[1, 2, 5, 10, 20].map(f => (
             <button key={f} onClick={() => setFeedrate(f)}
               className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
-                feedrate === f ? 'bg-primary-500/20 text-primary-300 border border-primary-500/40' : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700'
+                feedrate === f ? 'bg-primary/20 text-primary/70 border border-primary/40' : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700'
               }`}>{f}</button>
           ))}
         </div>
@@ -211,13 +211,13 @@ function FanControls() {
                 <div className="h-full bg-cyan-400 transition-all rounded-full" style={{ width: `${pct}%` }} />
               </div>
               {editIdx === i ? (
-                <input className="bg-gray-800 border border-gray-600 rounded-lg w-14 text-right text-xs py-1 px-2 text-white font-mono focus:border-primary-400 outline-none"
+                <input className="bg-gray-800 border border-gray-600 rounded-lg w-14 text-right text-xs py-1 px-2 text-white font-mono focus:border-primary/80 outline-none"
                   value={editVal}
                   onChange={e => setEditVal(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') setFan(i, parseFloat(editVal) || 0); if (e.key === 'Escape') setEditIdx(null) }}
                   onBlur={() => setEditIdx(null)} autoFocus />
               ) : (
-                <button onClick={() => { setEditIdx(i); setEditVal(String(pct)) }} className="font-mono text-white text-sm w-12 text-right hover:text-primary-300 transition">{pct}%</button>
+                <button onClick={() => { setEditIdx(i); setEditVal(String(pct)) }} className="font-mono text-white text-sm w-12 text-right hover:text-primary/70 transition">{pct}%</button>
               )}
               <button onClick={() => setFan(i, 100)} className="text-[10px] px-2 py-1 bg-gray-700/60 rounded-lg hover:bg-gray-600 text-gray-400 font-semibold transition">MAX</button>
             </div>

@@ -1002,7 +1002,8 @@ export default function StlImport() {
                   Flow {selectedProfile.materialFlowPct ?? 100}%
                 </span>
                 {selectedMaterial && (
-                  <span className="bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-gray-400">
+                  <span className="bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-gray-400"
+                    title="Nozzle / Bed temperature from material">
                     {selectedMaterial.printTempMaxDegC}°C / {selectedMaterial.bedTempMaxDegC}°C
                   </span>
                 )}

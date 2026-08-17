@@ -122,19 +122,32 @@ public sealed class MachineCoordinateTranslator : IMachineCoordinateTranslator
             var line = rawLine.TrimEnd('\r');
             var trimmed = line.TrimStart();
 
-            // Only remap G-code motion/position commands
+            // Only remap G-code motion/position commands (G0/G1 and their
+            // leading-zero variants G00/G01, plus G28 homing and G92 offset)
             if (trimmed.Length > 1 && trimmed[0] == 'G' &&
-                (trimmed.StartsWith("G0") || trimmed.StartsWith("G1") ||
+                (trimmed.StartsWith("G0 ") || trimmed.StartsWith("G1 ") ||
+                 trimmed.StartsWith("G00 ") || trimmed.StartsWith("G01 ") ||
                  trimmed.StartsWith("G28") || trimmed.StartsWith("G92")))
             {
-                var remapped = line
-                    .Replace("X", axisX.ToString())
-                    .Replace("x", char.ToLower(axisX).ToString())
-                    .Replace("Y", axisY.ToString())
-                    .Replace("y", char.ToLower(axisY).ToString())
-                    .Replace("Z", axisZ.ToString())
-                    .Replace("z", char.ToLower(axisZ).ToString());
-                sb.AppendLine(remapped);
+                // Token-based replacement to avoid collateral damage from
+                // sequential Replace() (e.g. X→Y, Y→X would double-swap).
+                var chars = line.ToCharArray();
+                for (var ci = 0; ci < chars.Length; ci++)
+                {
+                    // Only replace axis letters that precede a digit, sign, or decimal
+                    // (i.e. actual axis tokens like X10.5, not random letters in comments)
+                    var next = ci + 1 < chars.Length ? chars[ci + 1] : '\0';
+                    var isAxisToken = next is (>= '0' and <= '9') or '-' or '+' or '.';
+                    if (!isAxisToken) continue;
+
+                    if (chars[ci] == 'X')      chars[ci] = axisX;
+                    else if (chars[ci] == 'x') chars[ci] = char.ToLower(axisX);
+                    else if (chars[ci] == 'Y') chars[ci] = axisY;
+                    else if (chars[ci] == 'y') chars[ci] = char.ToLower(axisY);
+                    else if (chars[ci] == 'Z') chars[ci] = axisZ;
+                    else if (chars[ci] == 'z') chars[ci] = char.ToLower(axisZ);
+                }
+                sb.AppendLine(new string(chars));
             }
             else
             {

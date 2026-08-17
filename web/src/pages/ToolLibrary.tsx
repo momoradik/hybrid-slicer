@@ -118,6 +118,10 @@ export default function ToolLibrary() {
     mutationFn: toolsApi.create,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['tools'] }); setEditing(null) },
   })
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<CncTool> }) => toolsApi.update(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tools'] }); setEditing(null) },
+  })
 
   const deleteMutation = useMutation({
     mutationFn: toolsApi.delete,
@@ -329,7 +333,10 @@ export default function ToolLibrary() {
                 'Flute length cannot exceed overall tool length.'
               }>
                 <button
-                  onClick={() => createMutation.mutate(editing)}
+                  onClick={() => {
+                    if (editing.id) updateMutation.mutate({ id: editing.id, data: editing })
+                    else createMutation.mutate(editing)
+                  }}
                   disabled={!editing.name || !editing.diameterMm || fluteExceedsLength}
                   className="px-5 py-2 bg-primary/80 hover:bg-primary disabled:opacity-40 text-white rounded-lg text-sm transition"
                 >

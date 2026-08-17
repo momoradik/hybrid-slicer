@@ -129,7 +129,7 @@ export default function PrinterConsole() {
               key={i}
               className={`py-0.5 ${
                 line.startsWith('>')
-                  ? 'text-primary-300'
+                  ? 'text-primary/70'
                   : line.startsWith('[ERROR]')
                   ? 'text-red-400'
                   : 'text-green-400'

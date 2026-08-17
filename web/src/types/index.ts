@@ -207,6 +207,7 @@ export interface BrandingSettings {
   primaryColor: string
   accentColor: string
   supportEmail?: string
+  supportUrl?: string
 }
 
 export interface Material {

@@ -45,6 +45,7 @@ interface MachineForm {
   cncOffsetY: number
   cncOffsetZ: number
   cncOffsetRot: number
+  safeClearanceHeightMm: number
   extruderAxes: string
   cncAxes: string
   motionAssignmentEnabled: boolean
@@ -107,6 +108,7 @@ function machineToForm(m: MachineProfile): MachineForm {
     cncOffsetY: m.cncOffset?.y ?? 0,
     cncOffsetZ: m.cncOffset?.z ?? 0,
     cncOffsetRot: m.cncOffset?.rotationDeg ?? 0,
+    safeClearanceHeightMm: m.safeClearanceHeightMm ?? 5,
     extruderAxes: m.extruderAxes ?? 'XYZ',
     cncAxes: m.cncAxes ?? 'XYZ',
     motionAssignmentEnabled: m.motionAssignmentEnabled ?? false,
@@ -154,6 +156,7 @@ function emptyForm(): MachineForm {
     cncOffsetY: 0,
     cncOffsetZ: 0,
     cncOffsetRot: 0,
+    safeClearanceHeightMm: 5,
     extruderAxes: 'XYZ',
     cncAxes: 'XYZ',
     motionAssignmentEnabled: false,
@@ -292,6 +295,7 @@ function MachineConfigInner() {
       extruderAssignments: form.extruderAssignments.map(a => ({ extruderIndex: a.extruderIndex, duty: a.duty })),
       ipAddress: form.ipAddress || undefined, port: form.port,
       cncOffset: { x: form.cncOffsetX, y: form.cncOffsetY, z: form.cncOffsetZ, rotationDeg: form.cncOffsetRot },
+      safeClearanceHeightMm: form.safeClearanceHeightMm,
       extruderAxes: form.extruderAxes, cncAxes: form.cncAxes,
       motionAssignmentEnabled: form.motionAssignmentEnabled,
       motionAssignmentJson: JSON.stringify({
@@ -650,6 +654,11 @@ function MachineConfigInner() {
                       <NumInput value={form.cncOffsetZ} step={0.1} onChange={v => set('cncOffsetZ', v)} />
                     </MField>
                   </div>
+                  <MField label="Safe Clearance Height (mm)">
+                    <NumInput value={form.safeClearanceHeightMm} min={1} max={100} step={0.5}
+                      onChange={v => set('safeClearanceHeightMm', v)} />
+                    <p className="text-[10px] text-gray-600 mt-0.5">Rapid travel height above the part for CNC moves.</p>
+                  </MField>
                 </div>
               )}
             </div>

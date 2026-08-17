@@ -142,6 +142,43 @@ public class PrintProfile
         return Touch();
     }
 
+    public PrintProfile WithLineWidth(double mm)
+    {
+        if (mm is <= 0 or > 5)
+            throw DomainException.Invalid("INVALID_LINE_WIDTH", "lineWidthMm", "Line width", mm,
+                "greater than 0 and at most 5 mm");
+        LineWidthMm = mm;
+        return Touch();
+    }
+
+    public PrintProfile WithWallCount(int count)
+    {
+        if (count is < 0 or > 100)
+            throw DomainException.Invalid("INVALID_WALL_COUNT", "wallCount", "Wall count", count,
+                "between 0 and 100");
+        WallCount = count;
+        return Touch();
+    }
+
+    public PrintProfile WithCooling(bool enabled, int fanSpeedPct)
+    {
+        if (fanSpeedPct is < 0 or > 100)
+            throw DomainException.Invalid("INVALID_FAN_SPEED", "coolingFanSpeedPct", "Fan speed", fanSpeedPct,
+                "between 0 and 100 %");
+        CoolingEnabled = enabled;
+        CoolingFanSpeedPct = fanSpeedPct;
+        return Touch();
+    }
+
+    public PrintProfile WithFilamentDiameter(double mm)
+    {
+        if (mm is <= 0 or > 10)
+            throw DomainException.Invalid("INVALID_FILAMENT_DIAMETER", "filamentDiameterMm",
+                "Filament diameter", mm, "greater than 0 and at most 10 mm");
+        FilamentDiameterMm = mm;
+        return Touch();
+    }
+
     public PrintProfile WithSpeeds(double print, double travel, double infill, double wall, double firstLayer)
     {
         RequireSpeed(print,      "printSpeedMmS",      "Print speed");

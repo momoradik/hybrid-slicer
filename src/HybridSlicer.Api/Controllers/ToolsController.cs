@@ -29,17 +29,20 @@ public sealed class ToolsController : ControllerBase
         var tool = CncTool.Create(
             req.Name, req.Type, req.DiameterMm, req.FluteLengthMm, req.ShankDiameterMm,
             req.FluteCount, req.ToolMaterial, req.MaxDepthOfCutMm,
-            req.RecommendedRpm, req.RecommendedFeedMmPerMin);
+            req.RecommendedRpm, req.RecommendedFeedMmPerMin, req.ToolLengthMm);
         await _repo.AddAsync(tool, ct);
         return CreatedAtAction(nameof(GetById), new { id = tool.Id }, tool);
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> UpdateCuttingParams(Guid id, [FromBody] UpdateCuttingParamsRequest req, CancellationToken ct)
+    public async Task<IActionResult> Update(Guid id, [FromBody] CreateToolRequest req, CancellationToken ct)
     {
         var tool = await _repo.GetByIdAsync(id, ct);
         if (tool is null) return NotFound();
-        tool.UpdateCuttingParameters(req.RecommendedRpm, req.FeedMmPerMin, req.MaxDocMm);
+        tool.Update(
+            req.Name, req.Type, req.DiameterMm, req.FluteLengthMm, req.ShankDiameterMm,
+            req.FluteCount, req.ToolMaterial, req.MaxDepthOfCutMm,
+            req.RecommendedRpm, req.RecommendedFeedMmPerMin, req.ToolLengthMm);
         await _repo.UpdateAsync(tool, ct);
         return Ok(tool);
     }
@@ -65,6 +68,7 @@ public record CreateToolRequest(
     string ToolMaterial = "HSS",
     double MaxDepthOfCutMm = 0,
     int RecommendedRpm = 10000,
-    double RecommendedFeedMmPerMin = 500);
+    double RecommendedFeedMmPerMin = 500,
+    double ToolLengthMm = 50.0);
 
 public record UpdateCuttingParamsRequest(int RecommendedRpm, double FeedMmPerMin, double MaxDocMm);

@@ -150,7 +150,7 @@ function HeaterCard({ index, color }: { index: number; color: string }) {
         <span className="text-[10px] text-gray-500 uppercase">Target</span>
         {editing ? (
           <input
-            className="bg-gray-800 border border-gray-600 rounded px-2 py-0.5 w-16 text-center text-sm text-white font-mono focus:border-primary-400 outline-none"
+            className="bg-gray-800 border border-gray-600 rounded px-2 py-0.5 w-16 text-center text-sm text-white font-mono focus:border-primary/80 outline-none"
             value={editTemp}
             onChange={e => setEditTemp(e.target.value)}
             onKeyDown={e => {
@@ -297,7 +297,7 @@ function JobProgress() {
       {/* Progress bar */}
       <div className="w-full bg-gray-800 rounded-full h-2.5 overflow-hidden">
         <div
-          className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-primary-500 to-primary-400"
+          className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-primary to-primary/80"
           style={{ width: `${progress}%` }}
         />
       </div>
