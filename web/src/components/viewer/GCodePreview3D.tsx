@@ -53,7 +53,12 @@ function parseGCode(gcode: string): { segments: Segment[]; maxGcodeZ: number } {
     const up = line.toUpperCase()
 
     if (up.startsWith('G92')) {
-      const m = up.match(/E([+-]?[\d.]+)/); if (m) e = parseFloat(m[1]); continue
+      // Track all coordinate resets — G92 shifts the coordinate origin
+      const xr = up.match(/X([+-]?[\d.]+)/); if (xr) x = parseFloat(xr[1])
+      const yr = up.match(/Y([+-]?[\d.]+)/); if (yr) y = parseFloat(yr[1])
+      const zr = up.match(/Z([+-]?[\d.]+)/); if (zr) z = parseFloat(zr[1])
+      const er = up.match(/E([+-]?[\d.]+)/); if (er) e = parseFloat(er[1])
+      continue
     }
     if (!up.startsWith('G0') && !up.startsWith('G1')) continue
 
