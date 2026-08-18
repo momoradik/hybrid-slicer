@@ -22,23 +22,34 @@ public class DuetProxyController : ControllerBase
         if (!_driver.IsConnected)
             return StatusCode(503, new { error = "Not connected to a Duet board" });
 
-        var qs = Request.QueryString.Value ?? "";
-        var fullPath = $"{path}{qs}";
-
-        // Binary download for rr_download
-        if (path.StartsWith("rr_download", StringComparison.OrdinalIgnoreCase))
+        try
         {
-            var bytes = await _driver.ProxyGetBytesAsync(fullPath, ct);
-            return File(bytes, "application/octet-stream");
+            var qs = Request.QueryString.Value ?? "";
+            var fullPath = $"{path}{qs}";
+
+            // Binary download for rr_download
+            if (path.StartsWith("rr_download", StringComparison.OrdinalIgnoreCase))
+            {
+                var bytes = await _driver.ProxyGetBytesAsync(fullPath, ct);
+                return File(bytes, "application/octet-stream");
+            }
+
+            var responseBody = await _driver.ProxyGetAsync(fullPath, ct);
+
+            // rr_reply returns plain text, everything else returns JSON
+            var contentType = path.StartsWith("rr_reply", StringComparison.OrdinalIgnoreCase)
+                ? "text/plain"
+                : "application/json";
+            return Content(responseBody, contentType);
         }
-
-        var responseBody = await _driver.ProxyGetAsync(fullPath, ct);
-
-        // rr_reply returns plain text, everything else returns JSON
-        var contentType = path.StartsWith("rr_reply", StringComparison.OrdinalIgnoreCase)
-            ? "text/plain"
-            : "application/json";
-        return Content(responseBody, contentType);
+        catch (NotSupportedException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(502, new { error = $"Board communication error: {ex.Message}" });
+        }
     }
 
     /// <summary>POST proxy — used for rr_upload and similar.</summary>
@@ -49,15 +60,26 @@ public class DuetProxyController : ControllerBase
         if (!_driver.IsConnected)
             return StatusCode(503, new { error = "Not connected to a Duet board" });
 
-        var qs = Request.QueryString.Value ?? "";
-        var fullPath = $"{path}{qs}";
+        try
+        {
+            var qs = Request.QueryString.Value ?? "";
+            var fullPath = $"{path}{qs}";
 
-        using var ms = new MemoryStream();
-        await Request.Body.CopyToAsync(ms, ct);
-        var body = ms.ToArray();
-        var contentType = Request.ContentType ?? "application/octet-stream";
+            using var ms = new MemoryStream();
+            await Request.Body.CopyToAsync(ms, ct);
+            var body = ms.ToArray();
+            var contentType = Request.ContentType ?? "application/octet-stream";
 
-        var result = await _driver.ProxyPostAsync(fullPath, body, contentType, ct);
-        return Content(result, "application/json");
+            var result = await _driver.ProxyPostAsync(fullPath, body, contentType, ct);
+            return Content(result, "application/json");
+        }
+        catch (NotSupportedException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(502, new { error = $"Board communication error: {ex.Message}" });
+        }
     }
 }
