@@ -66,7 +66,6 @@ public sealed record SlicingParameters(
     double MinSpeedMmS,
 
     // Motion control
-    // Motion control
     bool AccelerationControlEnabled,
     bool JerkControlEnabled,
 

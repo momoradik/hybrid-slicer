@@ -149,9 +149,12 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         string gcodePath)
     {
         var ic      = System.Globalization.CultureInfo.InvariantCulture;
-        var lw      = p.LineWidthMm.ToString("F4", ic);
-        var lh      = p.LayerHeightMm.ToString("F4", ic);
-        var minWall = (p.LineWidthMm * 0.85).ToString("F4", ic);
+        // Guard against zero values that would crash CuraEngine with divide-by-zero
+        var lineWidth   = p.LineWidthMm > 0 ? p.LineWidthMm : 0.4;
+        var layerHeight = p.LayerHeightMm > 0 ? p.LayerHeightMm : 0.2;
+        var lw      = lineWidth.ToString("F4", ic);
+        var lh      = layerHeight.ToString("F4", ic);
+        var minWall = (lineWidth * 0.85).ToString("F4", ic);
 
         var sb = new StringBuilder("slice -v -p");
 
@@ -203,7 +206,7 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         // CuraEngine cannot fall back to a stale formula value from the definition file.
         // infill_line_distance = (line_width * 100) / infill_sparse_density
         var infillLineDist = p.InfillDensityPct > 0
-            ? (p.LineWidthMm * 100.0) / p.InfillDensityPct
+            ? (lineWidth * 100.0) / p.InfillDensityPct
             : 99999.0;  // near-zero density → very large spacing, avoids divide-by-zero in engine
         sb.Append($" -s infill_sparse_density={p.InfillDensityPct.ToString("F4", ic)}");
         sb.Append($" -s infill_line_distance={infillLineDist.ToString("F4", ic)}");
