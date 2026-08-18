@@ -1,8 +1,9 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useAxes, useTools, useFans, useMachineStatus } from '../../store/duetStore'
 import { useDuetStore, validHeaters, heaterLabel } from '../../store/duetStore'
 import { statusLabel, statusColor } from '../../services/duetApi'
 import * as duetApi from '../../services/duetApi'
+import { Area, AreaChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 const MOVE_STEPS = [0.1, 0.5, 1, 5, 10, 50, 100]
 
@@ -160,6 +161,112 @@ function HeaterCard({ index }: { index: number }) {
           <button onClick={() => { setEditing(true); setEditTemp(String(active)) }}
             className="w-12 py-1 rounded text-[10px] bg-gray-700/60 text-gray-400 hover:bg-gray-600/60 hover:text-gray-200 transition">Set</button>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── Compact Temperature Chart ─────────────────────────────────────────────────
+
+const HEATER_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899']
+
+function TempChart() {
+  const tempHistory = useDuetStore(s => s.tempHistory)
+  const model = useDuetStore(s => s.model)
+  const heaterEntries = useMemo(() => validHeaters(model), [model])
+  const labels = useMemo(() => heaterEntries.map(e => e.label), [heaterEntries])
+
+  if (!tempHistory.length || !labels.length) return null
+
+  return (
+    <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+      <h3 className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Temperature History</h3>
+      <ResponsiveContainer width="100%" height={180}>
+        <AreaChart data={tempHistory} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+          <defs>
+            {labels.map((_, i) => (
+              <linearGradient key={i} id={`cg-${i}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={HEATER_COLORS[i % HEATER_COLORS.length]} stopOpacity={0.25} />
+                <stop offset="95%" stopColor={HEATER_COLORS[i % HEATER_COLORS.length]} stopOpacity={0} />
+              </linearGradient>
+            ))}
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <XAxis dataKey="label" stroke="#475569" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
+          <YAxis stroke="#475569" tick={{ fontSize: 9 }} domain={[0, 'auto']} unit="°" width={35} />
+          <Tooltip
+            contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', fontSize: 11 }}
+            labelStyle={{ color: '#94a3b8', fontWeight: 600 }}
+          />
+          {labels.map((lbl, i) => (
+            <Area key={lbl} type="monotone" dataKey={`heaters.${lbl}`} name={lbl}
+              stroke={HEATER_COLORS[i % HEATER_COLORS.length]} strokeWidth={1.5}
+              fill={`url(#cg-${i})`} dot={false} isAnimationActive={false} />
+          ))}
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+// ── Inline File Browser ───────────────────────────────────────────────────────
+
+function InlineFileBrowser({ onRun }: { onRun: (path: string) => void }) {
+  const [files, setFiles] = useState<{ name: string; type: 'd' | 'f'; size: number }[]>([])
+  const [dir, setDir] = useState('0:/gcodes')
+  const [loading, setLoading] = useState(false)
+
+  const loadFiles = useCallback(async (path: string) => {
+    setLoading(true)
+    try {
+      const data = await duetApi.listFiles(path)
+      setFiles(data.files ?? [])
+      setDir(path)
+    } catch {
+      setFiles([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadFiles(dir) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const goUp = () => {
+    const parent = dir.substring(0, dir.lastIndexOf('/')) || '0:'
+    loadFiles(parent)
+  }
+
+  return (
+    <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Files</h3>
+        <div className="flex gap-1 items-center">
+          <button onClick={goUp} className="text-[10px] px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded transition">Up</button>
+          <button onClick={() => loadFiles(dir)} className="text-[10px] px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded transition">Refresh</button>
+        </div>
+      </div>
+      <div className="text-[10px] text-gray-600 mb-1 font-mono truncate">{dir}</div>
+      <div className="max-h-40 overflow-y-auto space-y-0.5">
+        {loading ? (
+          <div className="text-[10px] text-gray-600 text-center py-3">Loading...</div>
+        ) : files.length === 0 ? (
+          <div className="text-[10px] text-gray-600 text-center py-3">No files</div>
+        ) : files.map(f => (
+          <div key={f.name}
+            className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-gray-800/60 transition group">
+            <button
+              onClick={() => f.type === 'd' ? loadFiles(`${dir}/${f.name}`) : onRun(`${dir}/${f.name}`)}
+              className="text-[11px] text-gray-300 truncate text-left flex-1 min-w-0">
+              {f.type === 'd' ? `📁 ${f.name}` : f.name}
+            </button>
+            {f.type !== 'd' && (
+              <button onClick={() => { if (confirm(`Start printing ${f.name}?`)) duetApi.sendGCode(`M32 "${dir}/${f.name}"`) }}
+                className="text-[9px] px-1.5 py-0.5 bg-green-900/40 text-green-300 rounded opacity-0 group-hover:opacity-100 transition border border-green-700/30">
+                Print
+              </button>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -456,14 +563,23 @@ export default function PrinterControl() {
           </div>
         </div>
 
-        {/* ═══ RIGHT: Console ═══ */}
-        <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3 flex flex-col" style={{ minHeight: 500 }}>
-          <h3 className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Console</h3>
-          <div className="flex-1 min-h-0">
-            <InlineConsole />
+        {/* ═══ RIGHT: Console + Files ═══ */}
+        <div className="space-y-4">
+          {/* Console */}
+          <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3 flex flex-col" style={{ minHeight: 360 }}>
+            <h3 className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Console</h3>
+            <div className="flex-1 min-h-0">
+              <InlineConsole />
+            </div>
           </div>
+
+          {/* Inline file browser */}
+          <InlineFileBrowser onRun={runMacro} />
         </div>
       </div>
+
+      {/* ── Temperature chart (full width below) ── */}
+      <TempChart />
     </div>
   )
 }
