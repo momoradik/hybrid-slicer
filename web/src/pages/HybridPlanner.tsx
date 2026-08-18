@@ -60,11 +60,15 @@ export default function HybridPlanner() {
       if (result?.machinedAtLayers) setMachinedLayers(result.machinedAtLayers)
       if (result?.unmachinableRegions) setUnmachinableRegions(result.unmachinableRegions)
       else setUnmachinableRegions([])
-      const gcode = await jobsApi.getToolpathGCode(jobId)
-      setToolpathGCode(gcode)
-      const pg = await jobsApi.getPrintGCode(jobId)
-      setPrintGCode(pg)
-      setActiveTab('gcode')
+      try {
+        const gcode = await jobsApi.getToolpathGCode(jobId)
+        setToolpathGCode(gcode)
+        const pg = await jobsApi.getPrintGCode(jobId)
+        setPrintGCode(pg)
+        setActiveTab('gcode')
+      } catch {
+        // G-code fetch failed — toolpaths were generated but files aren't ready yet
+      }
     },
   })
 

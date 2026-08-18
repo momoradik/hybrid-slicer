@@ -536,6 +536,8 @@ export default function StlImport() {
           setGeneratedJobId(jobIds[0])
         }
         setActiveTab('preview')
+      } catch {
+        // Error state handled by uploadMutation.isError / sliceMutation.isError
       } finally {
         setIsMergingBeds(false)
       }
@@ -543,44 +545,48 @@ export default function StlImport() {
       // Single bed: existing flow
       const primary = selectedModel ?? models[0]
       if (!primary) return
-      const fd = new FormData()
-      const transformedFile = await buildTransformedStlBlob(primary.file, primary.transform)
-      fd.append('file', transformedFile, primary.file.name)
-      fd.append('jobName', jobName)
-      fd.append('machineProfileId', machineId)
-      fd.append('printProfileId', profileId)
-      fd.append('materialId', materialId)
-      fd.append('supportEnabled', supportEnabled.toString())
-      fd.append('supportType', supportType)
-      fd.append('supportPlacement', supportPlacement)
-      fd.append('infillPattern', infillPattern)
-      fd.append('infillDensityPct', infillDensity.toString())
-      fd.append('supportInfillPattern', supportInfillPattern)
-      fd.append('supportInfillDensityPct', supportInfillDensity.toString())
-      fd.append('adhesionType', adhesionType)
-      fd.append('gcodeHoming', gcodeHoming.toString())
-      fd.append('gcodeLevelling', gcodeLevelling.toString())
-      fd.append('applyCustomGCodeBlocks', applyCustomGCodeBlocks.toString())
-      const { jobId } = await uploadMutation.mutateAsync(fd)
-      await sliceMutation.mutateAsync(jobId)
+      try {
+        const fd = new FormData()
+        const transformedFile = await buildTransformedStlBlob(primary.file, primary.transform)
+        fd.append('file', transformedFile, primary.file.name)
+        fd.append('jobName', jobName)
+        fd.append('machineProfileId', machineId)
+        fd.append('printProfileId', profileId)
+        fd.append('materialId', materialId)
+        fd.append('supportEnabled', supportEnabled.toString())
+        fd.append('supportType', supportType)
+        fd.append('supportPlacement', supportPlacement)
+        fd.append('infillPattern', infillPattern)
+        fd.append('infillDensityPct', infillDensity.toString())
+        fd.append('supportInfillPattern', supportInfillPattern)
+        fd.append('supportInfillDensityPct', supportInfillDensity.toString())
+        fd.append('adhesionType', adhesionType)
+        fd.append('gcodeHoming', gcodeHoming.toString())
+        fd.append('gcodeLevelling', gcodeLevelling.toString())
+        fd.append('applyCustomGCodeBlocks', applyCustomGCodeBlocks.toString())
+        const { jobId } = await uploadMutation.mutateAsync(fd)
+        await sliceMutation.mutateAsync(jobId)
 
-      // For hybrid single-bed: also generate toolpaths and merge into a
-      // single hybrid.gcode (multi-bed handles this server-side via mergeBeds).
-      // Without plan-hybrid, HybridGCodePath stays null and the "Download
-      // Hybrid G-code" link returns 400.
-      if (isHybrid && cncToolId) {
-        await jobsApi.generateToolpaths(
-          jobId, cncToolId, machineEveryN,
-          machineInnerWalls, avoidSupports, supportClearanceMm,
-          autoMachiningFrequency, zSafetyOffsetMm, spindleRpmOverride,
-          0, 0, null, 0, 0, null, skipMachiningLayers,
-        )
-        await jobsApi.planHybrid(jobId, machineEveryN)
+        // For hybrid single-bed: also generate toolpaths and merge into a
+        // single hybrid.gcode (multi-bed handles this server-side via mergeBeds).
+        // Without plan-hybrid, HybridGCodePath stays null and the "Download
+        // Hybrid G-code" link returns 400.
+        if (isHybrid && cncToolId) {
+          await jobsApi.generateToolpaths(
+            jobId, cncToolId, machineEveryN,
+            machineInnerWalls, avoidSupports, supportClearanceMm,
+            autoMachiningFrequency, zSafetyOffsetMm, spindleRpmOverride,
+            0, 0, null, 0, 0, null, skipMachiningLayers,
+          )
+          await jobsApi.planHybrid(jobId, machineEveryN)
+        }
+
+        qc.invalidateQueries({ queryKey: ['jobs'] })
+        setGeneratedJobId(jobId)
+        setActiveTab('preview')
+      } catch {
+        // Error state is handled by uploadMutation.isError / sliceMutation.isError
       }
-
-      qc.invalidateQueries({ queryKey: ['jobs'] })
-      setGeneratedJobId(jobId)
-      setActiveTab('preview')
     }
   }
 
