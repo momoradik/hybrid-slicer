@@ -40,7 +40,7 @@ public sealed class MultiBedMerger
                 var line = rawLine.Trim();
                 if (line.Length == 0 || line[0] == ';') continue;
                 var upper = line.ToUpperInvariant();
-                if (!upper.StartsWith("G0") && !upper.StartsWith("G1")) continue;
+                if (!(upper.StartsWith("G0 ") || upper.StartsWith("G1 ") || upper.StartsWith("G00 ") || upper.StartsWith("G01 "))) continue;
                 var xMatch = System.Text.RegularExpressions.Regex.Match(upper, @"X([+-]?[\d.]+)");
                 var yMatch = System.Text.RegularExpressions.Regex.Match(upper, @"Y([+-]?[\d.]+)");
                 if (xMatch.Success || yMatch.Success)
