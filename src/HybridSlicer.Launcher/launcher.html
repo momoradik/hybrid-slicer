@@ -410,20 +410,15 @@
     btnCheck.classList.add('checking');
     btnCheck.textContent = 'Checking...';
     window.chrome.webview.postMessage({ action: 'check-for-update' });
+    // Safety timeout: if no C# event fires within 15s (network timeout),
+    // reset the button but do NOT show "Up to date" — that would be a lie.
     setTimeout(function() {
-      if (!updateBanner.classList.contains('visible')) {
-        btnCheck.textContent = 'Up to date';
-        setTimeout(function() {
-          btnCheck.textContent = 'Check for Updates';
-          btnCheck.disabled = false;
-          btnCheck.classList.remove('checking');
-        }, 2000);
-      } else {
+      if (btnCheck.textContent === 'Checking...') {
         btnCheck.textContent = 'Check for Updates';
         btnCheck.disabled = false;
         btnCheck.classList.remove('checking');
       }
-    }, 4000);
+    }, 15000);
   }
 
   function showBanner(title, msg, buttons) {

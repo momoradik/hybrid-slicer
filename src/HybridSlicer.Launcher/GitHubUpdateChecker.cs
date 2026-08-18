@@ -10,6 +10,7 @@ public sealed class GitHubUpdateChecker : IDisposable
 {
     private const string Owner = "momoradik";
     private const string Repo = "hybrid-slicer";
+    private const string ReleasesUrl = $"https://github.com/{Owner}/{Repo}/releases";
 
     private readonly HttpClient _http;
     private readonly Version _currentVersion;
@@ -34,14 +35,12 @@ public sealed class GitHubUpdateChecker : IDisposable
             "HybridSlicer", "updates");
         Directory.CreateDirectory(_downloadDir);
 
-        _token = LoadEmbeddedToken();
+        // Token priority: AppData file (user-replaceable) > embedded resource (build-time)
+        _token = LoadAppDataToken() ?? LoadEmbeddedToken();
 
         _http = new HttpClient();
         _http.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("HybridSlicer", _currentVersion.ToString()));
-        if (_token is not null)
-            _http.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", _token);
 
         _timer = new System.Windows.Forms.Timer { Interval = 30 * 60 * 1000 }; // 30 min
         _timer.Tick += async (_, _) => await CheckForUpdateAsync();
@@ -71,20 +70,13 @@ public sealed class GitHubUpdateChecker : IDisposable
         try
         {
             var url = $"https://api.github.com/repos/{Owner}/{Repo}/releases/latest";
-            var response = await _http.GetAsync(url);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                Log($"GitHub API returned {response.StatusCode}");
-                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
-                    response.StatusCode == System.Net.HttpStatusCode.Forbidden)
-                    UpdateError?.Invoke("GitHub authentication failed. Update token may be missing or expired.");
-                else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    UpdateError?.Invoke("Could not reach update server. The repository may be private — please reinstall to get the latest update token.");
-                else
-                    UpdateError?.Invoke($"Update check failed (HTTP {(int)response.StatusCode}).");
-                return;
-            }
+            // Try with token first, then retry without if auth fails (handles expired tokens
+            // and the case where the repo was made public after the build).
+            var response = await FetchWithFallbackAsync(url);
+
+            if (response is null)
+                return; // FetchWithFallbackAsync already fired UpdateError
 
             var json = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(json);
@@ -96,6 +88,7 @@ public sealed class GitHubUpdateChecker : IDisposable
             if (!Version.TryParse(versionStr, out var remoteVersion))
             {
                 Log($"Could not parse version from tag: {tagName}");
+                UpdateError?.Invoke($"Could not parse version from release tag: {tagName}");
                 return;
             }
 
@@ -129,16 +122,78 @@ public sealed class GitHubUpdateChecker : IDisposable
             if (assetUrl is null)
             {
                 Log("No installer asset found in release");
+                UpdateError?.Invoke("Update found but no installer file attached to the release.");
                 return;
             }
 
             Log($"Update available: v{versionStr} ({assetName})");
             UpdateAvailable?.Invoke(versionStr);
         }
+        catch (HttpRequestException ex)
+        {
+            Log($"Update check failed (network): {ex.Message}");
+            UpdateError?.Invoke("Could not connect to the update server. Check your internet connection.");
+        }
         catch (Exception ex)
         {
             Log($"Update check failed: {ex.Message}");
+            UpdateError?.Invoke($"Update check failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Tries the GitHub API with the configured token. If auth fails (401/403/404 on private repo),
+    /// retries without auth in case the repo has since been made public. Returns null if both fail
+    /// (and fires UpdateError with actionable guidance).
+    /// </summary>
+    private async Task<HttpResponseMessage?> FetchWithFallbackAsync(string url)
+    {
+        // Attempt 1: with token
+        using var authedRequest = new HttpRequestMessage(HttpMethod.Get, url);
+        authedRequest.Headers.UserAgent.Add(new ProductInfoHeaderValue("HybridSlicer", _currentVersion.ToString()));
+        if (_token is not null)
+            authedRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+
+        var response = await _http.SendAsync(authedRequest);
+
+        if (response.IsSuccessStatusCode)
+            return response;
+
+        Log($"GitHub API returned {response.StatusCode} (with token)");
+
+        // Attempt 2: without token (repo may have been made public)
+        if (_token is not null)
+        {
+            Log("Retrying without token...");
+            using var unauthRequest = new HttpRequestMessage(HttpMethod.Get, url);
+            unauthRequest.Headers.UserAgent.Add(new ProductInfoHeaderValue("HybridSlicer", _currentVersion.ToString()));
+
+            var fallback = await _http.SendAsync(unauthRequest);
+            if (fallback.IsSuccessStatusCode)
+            {
+                Log("Succeeded without token — repo may now be public");
+                return fallback;
+            }
+            Log($"Fallback also failed: {fallback.StatusCode}");
+        }
+
+        // Both attempts failed — provide actionable error
+        var tokenPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "HybridSlicer", "update-token.txt");
+
+        var msg = response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden =>
+                $"Update token expired or revoked. Place a valid GitHub token in:\n{tokenPath}\nor download the latest version manually from:\n{ReleasesUrl}",
+            System.Net.HttpStatusCode.NotFound =>
+                $"Cannot access the update server (private repository). Place a valid GitHub token in:\n{tokenPath}\nor download manually from:\n{ReleasesUrl}",
+            _ =>
+                $"Update check failed (HTTP {(int)response.StatusCode}). Download manually from:\n{ReleasesUrl}",
+        };
+
+        UpdateError?.Invoke(msg);
+        return null;
     }
 
     public async Task DownloadUpdateAsync()
@@ -247,6 +302,25 @@ public sealed class GitHubUpdateChecker : IDisposable
         }
     }
 
+    /// <summary>
+    /// Loads token from %LOCALAPPDATA%/HybridSlicer/update-token.txt.
+    /// Users can place a fresh token here to fix auth without reinstalling.
+    /// </summary>
+    private static string? LoadAppDataToken()
+    {
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "HybridSlicer", "update-token.txt");
+            if (!File.Exists(path)) return null;
+            var token = File.ReadAllText(path).Trim();
+            return string.IsNullOrEmpty(token) ? null : token;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>Loads token embedded at build time as a fallback.</summary>
     private static string? LoadEmbeddedToken()
     {
         try
