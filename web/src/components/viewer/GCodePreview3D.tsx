@@ -344,9 +344,14 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
       cancelAnimationFrame(animId)
       ro.disconnect()
       controls.dispose()
-      cylGeo.dispose()
-      modelMesh.material instanceof THREE.Material && modelMesh.material.dispose()
-      supportMesh.material instanceof THREE.Material && supportMesh.material.dispose()
+      // Dispose all geometries and materials to prevent GPU memory leaks
+      scene.traverse(obj => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.LineSegments || obj instanceof THREE.Sprite) {
+          obj.geometry?.dispose()
+          if (obj.material instanceof THREE.Material) obj.material.dispose()
+          else if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose())
+        }
+      })
       renderer.dispose()
       if (el.contains(renderer.domElement)) el.removeChild(renderer.domElement)
       sceneRef.current    = null

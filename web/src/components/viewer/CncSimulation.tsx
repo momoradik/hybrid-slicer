@@ -440,7 +440,16 @@ export default function CncSimulation({
 
     return () => {
       cancelAnimationFrame(animId); cancelAnimationFrame(rafRef.current)
-      ro.disconnect(); controls.dispose(); renderer.dispose()
+      ro.disconnect(); controls.dispose()
+      // Dispose all Three.js geometries and materials to prevent GPU memory leaks
+      scene.traverse(obj => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.LineSegments) {
+          obj.geometry?.dispose()
+          if (obj.material instanceof THREE.Material) obj.material.dispose()
+          else if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose())
+        }
+      })
+      renderer.dispose()
       if (el.contains(renderer.domElement)) el.removeChild(renderer.domElement)
       sceneRef.current = null; rendererRef.current = null
       toolGroupRef.current = null; rapidLinesRef.current = null
