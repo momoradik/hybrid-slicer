@@ -212,7 +212,7 @@ export default function PrintSettings() {
 
       {/* Editor modal */}
       {draft && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
             <div className="sticky top-0 bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
               <h3 className="font-semibold text-white">{draft.id ? 'Edit' : 'New'} Print Profile</h3>

@@ -390,8 +390,9 @@ function Editor({
   const fieldError = (name: string) => error?.field === name
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
+      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
         <div className="p-6 space-y-5">
           <h3 className="font-semibold text-white text-lg">
             {draft.id ? 'Edit' : 'New'} G-code Block

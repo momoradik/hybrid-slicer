@@ -161,7 +161,12 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold text-white">Dashboard</h2>
+        <div>
+          <h2 className="text-2xl font-semibold text-white">Dashboard</h2>
+          {jobs.length > 0 && (
+            <p className="text-sm text-gray-500 mt-0.5">{jobs.length} job{jobs.length !== 1 ? 's' : ''}</p>
+          )}
+        </div>
         <Link
           to="/import"
           className="px-4 py-2 bg-primary/80 hover:bg-primary text-white text-sm rounded-lg transition-colors"
@@ -171,13 +176,15 @@ export default function Dashboard() {
       </div>
 
       {isLoading ? (
-        <p className="text-gray-500">Loading jobs…</p>
+        <p className="text-gray-500">Loading jobs...</p>
       ) : isError ? (
-        <p className="text-red-400">Failed to load jobs. Check your connection and try again.</p>
+        <div className="text-center py-16 bg-red-950/20 border border-red-800/30 rounded-xl">
+          <p className="text-red-400">Failed to load jobs. Check your connection and try again.</p>
+        </div>
       ) : jobs.length === 0 ? (
-        <div className="text-center py-20 text-gray-600">
-          <p className="text-4xl mb-4">📦</p>
-          <p>No jobs yet. Import an STL to get started.</p>
+        <div className="text-center py-16 bg-gray-900/50 border border-gray-800 rounded-xl">
+          <div className="text-4xl text-gray-700 mb-3">No jobs yet</div>
+          <p className="text-gray-500 text-sm">Click <span className="text-primary/80 font-medium">+ New Job</span> to import an STL and get started.</p>
         </div>
       ) : (
         <div className="grid gap-4">

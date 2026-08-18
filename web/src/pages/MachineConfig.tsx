@@ -369,7 +369,7 @@ function MachineConfigInner() {
 
       {/* Modal */}
       {form && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
           // Backdrop close requires a real double-click on the backdrop itself.
           // A single click does nothing, so a stray click outside the dialog
           // can never silently discard in-progress edits.
