@@ -55,13 +55,29 @@ public sealed class MachineHub : Hub
     public async Task SendManualCommand(string gcode)
     {
         if (string.IsNullOrWhiteSpace(gcode)) return;
+        if (!_driver.IsConnected)
+        {
+            await Clients.Caller.SendAsync("CommandResponse", "Error: Not connected to a machine.");
+            return;
+        }
         _logger.LogInformation("Hub: Manual command '{Cmd}'", gcode);
-        var response = await _driver.SendCommandWithResponseAsync(gcode, Context.ConnectionAborted);
-        await Clients.Caller.SendAsync("CommandResponse", response);
+        try
+        {
+            var response = await _driver.SendCommandWithResponseAsync(gcode, Context.ConnectionAborted);
+            await Clients.Caller.SendAsync("CommandResponse", response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Hub: Command '{Cmd}' failed", gcode);
+            await Clients.Caller.SendAsync("CommandResponse", $"Error: {ex.Message}");
+        }
     }
 
     public async IAsyncEnumerable<object> StreamJob(string gcodePath)
     {
+        if (!_driver.IsConnected)
+            yield break;
+
         await foreach (var progress in _driver.StreamFileAsync(gcodePath, Context.ConnectionAborted))
         {
             yield return new

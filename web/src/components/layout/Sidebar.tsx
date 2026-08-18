@@ -28,7 +28,7 @@ export default function Sidebar() {
   const machineConnected = useAppStore(s => s.machineConnected)
 
   return (
-    <nav className="w-56 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
+    <nav className="w-56 bg-gray-900 border-r border-gray-800 shadow-sm flex flex-col shrink-0">
       <div className="px-4 py-5 border-b border-gray-800">
         <h1 className="text-lg font-bold text-primary/80 truncate">
           {branding?.appTitle ?? 'HybridSlicer'}
@@ -38,7 +38,7 @@ export default function Sidebar() {
         )}
       </div>
 
-      <ul className="flex-1 py-3 space-y-0.5 overflow-y-auto">
+      <ul className="flex-1 py-3 space-y-1 overflow-y-auto">
         {navItems.map(({ to, label, icon }) => (
           <li key={to}>
             <NavLink
@@ -46,8 +46,8 @@ export default function Sidebar() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors rounded-md mx-2 ` +
                 (isActive
-                  ? 'bg-primary/20 text-primary/70 font-medium'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800')
+                  ? 'bg-primary/20 text-primary/70 font-medium border-l-2 border-primary/70'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800 border-l-2 border-transparent')
               }
             >
               <span>{icon}</span>
@@ -56,17 +56,17 @@ export default function Sidebar() {
           </li>
         ))}
 
-        {/* Printer tab — shown when machine is connected */}
+        {/* Printer tab */}
         <li>
           <NavLink
             to="/printer"
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors rounded-md mx-2 ` +
               (isActive
-                ? 'bg-primary/20 text-primary/70 font-medium'
+                ? 'bg-primary/20 text-primary/70 font-medium border-l-2 border-primary/70'
                 : machineConnected
-                ? 'text-green-400 hover:text-green-300 hover:bg-gray-800'
-                : 'text-gray-600 hover:text-gray-400 hover:bg-gray-800')
+                ? 'text-green-400 hover:text-green-300 hover:bg-gray-800 border-l-2 border-transparent'
+                : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800 border-l-2 border-transparent')
             }
           >
             <span className="relative">

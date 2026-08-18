@@ -31,8 +31,8 @@ export default function DisabledHint({
         className="
           pointer-events-none absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2
           px-3 py-1.5 rounded-lg text-xs leading-snug text-gray-200 bg-gray-800 border border-gray-600
-          whitespace-normal max-w-xs text-center shadow-lg
-          opacity-0 group-hover:opacity-100 transition-opacity duration-150
+          whitespace-normal max-w-sm text-center shadow-lg
+          opacity-0 group-hover:opacity-100 transition-opacity duration-200
         "
       >
         {reason}
