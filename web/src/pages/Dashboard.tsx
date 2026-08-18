@@ -147,7 +147,7 @@ function JobCard({ job, onDelete, deleting }: { job: PrintJob; onDelete: () => v
 
 export default function Dashboard() {
   const qc = useQueryClient()
-  const { data: jobs = [], isLoading } = useQuery({
+  const { data: jobs = [], isLoading, isError } = useQuery({
     queryKey: ['jobs'],
     queryFn: jobsApi.getAll,
     refetchInterval: 3000,
@@ -172,6 +172,8 @@ export default function Dashboard() {
 
       {isLoading ? (
         <p className="text-gray-500">Loading jobs…</p>
+      ) : isError ? (
+        <p className="text-red-400">Failed to load jobs. Check your connection and try again.</p>
       ) : jobs.length === 0 ? (
         <div className="text-center py-20 text-gray-600">
           <p className="text-4xl mb-4">📦</p>
