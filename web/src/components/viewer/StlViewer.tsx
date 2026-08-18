@@ -662,6 +662,14 @@ const StlViewer = forwardRef<StlViewerHandle, Props>(function StlViewer(
       renderer.domElement.removeEventListener('dblclick', onDblClick)
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
+      // Dispose all scene geometries and materials to prevent GPU memory leaks
+      scene.traverse(obj => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.LineSegments) {
+          obj.geometry?.dispose()
+          if (obj.material instanceof THREE.Material) obj.material.dispose()
+          else if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose())
+        }
+      })
       renderer.dispose()
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement)
       sceneRef.current  = null
