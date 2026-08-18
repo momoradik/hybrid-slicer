@@ -165,6 +165,30 @@ function HeaterCard({ index }: { index: number }) {
   )
 }
 
+// ── Override slider ───────────────────────────────────────────────────────────
+
+function OverrideSlider({ label, value, unit, onChange, min, max }: {
+  label: string; value: number; unit: string; onChange: (v: number) => void; min: number; max: number
+}) {
+  return (
+    <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+      <div className="flex items-center justify-between mb-1.5">
+        <h3 className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">{label}</h3>
+        <span className="text-sm font-mono font-bold text-white">{value}{unit}</span>
+      </div>
+      <input type="range" min={min} max={max} value={value}
+        onChange={e => onChange(+e.target.value)}
+        className="w-full h-1.5 bg-gray-700 rounded-full appearance-none cursor-pointer accent-primary"
+        style={{ accentColor: 'rgb(var(--color-primary))' }} />
+      <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
+        <span>{min}{unit}</span>
+        <button onClick={() => onChange(100)} className="text-gray-500 hover:text-gray-300 transition">Reset</button>
+        <span>{max}{unit}</span>
+      </div>
+    </div>
+  )
+}
+
 // ── Main unified control page ─────────────────────────────────────────────────
 
 export default function PrinterControl() {
@@ -195,6 +219,15 @@ export default function PrinterControl() {
         <div className="flex items-center gap-3">
           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColor(status)}`}>{statusLabel(status)}</span>
           {currentTool >= 0 && <span className="text-xs text-gray-400">Tool: T{currentTool}</span>}
+          {/* Inline pause/resume when printing */}
+          {(status === 'processing' || status === 'paused' || status === 'pausing' || status === 'resuming') && (
+            <div className="flex gap-1.5 ml-2">
+              <button onClick={() => duetApi.sendGCode('M25')}
+                className="px-2.5 py-1 bg-yellow-900/40 hover:bg-yellow-800/50 text-yellow-300 rounded text-[10px] font-semibold transition border border-yellow-700/30">Pause</button>
+              <button onClick={() => duetApi.sendGCode('M24')}
+                className="px-2.5 py-1 bg-green-900/40 hover:bg-green-800/50 text-green-300 rounded text-[10px] font-semibold transition border border-green-700/30">Resume</button>
+            </div>
+          )}
         </div>
         <button
           onClick={() => { if (confirm('EMERGENCY STOP?')) duetApi.sendGCode('M112\nM999') }}
@@ -202,6 +235,51 @@ export default function PrinterControl() {
         >
           E-STOP
         </button>
+      </div>
+
+      {/* ── Print progress (visible during printing) ── */}
+      {model?.job?.file?.fileName && (
+        <div className="bg-gray-900/60 border border-gray-800 rounded-xl px-4 py-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-gray-400 truncate flex-1">{model.job.file.fileName}</span>
+            <span className="text-xs font-mono text-white ml-2">
+              {model.job.layer != null && `Layer ${model.job.layer}`}
+            </span>
+          </div>
+          <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div className="h-full bg-green-500 rounded-full transition-all"
+              style={{ width: `${Math.min(100, (model.job.filePosition ?? 0) / Math.max(1, model.job.file.size ?? 1) * 100)}%` }} />
+          </div>
+          <div className="flex justify-between mt-1.5 text-[10px] text-gray-500">
+            <span>{model.job.duration != null ? `${Math.floor(model.job.duration / 60)}m elapsed` : ''}</span>
+            <span>{model.job.timesLeft?.file != null ? `~${Math.ceil(model.job.timesLeft.file / 60)}m left` : ''}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Speed / Flow / Baby Step overrides ── */}
+      <div className="grid grid-cols-3 gap-3">
+        <OverrideSlider label="Speed" value={model?.move?.speedFactor ?? 100} unit="%"
+          onChange={v => duetApi.sendGCode(`M220 S${v}`)} min={10} max={300} />
+        <OverrideSlider label="Flow" value={model?.move?.extruders?.[0]?.factor != null ? Math.round(model.move.extruders[0].factor * 100) : 100} unit="%"
+          onChange={v => duetApi.sendGCode(`M221 S${v}`)} min={50} max={200} />
+        <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+          <h3 className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-1.5">Baby Step Z</h3>
+          <div className="flex gap-1">
+            <button onClick={() => duetApi.sendGCode('M290 R0 S-0.05')}
+              className="flex-1 py-1.5 bg-gray-700/60 hover:bg-gray-600/60 text-gray-300 rounded text-xs font-mono font-bold transition">-0.05</button>
+            <button onClick={() => duetApi.sendGCode('M290 R0 S-0.01')}
+              className="flex-1 py-1.5 bg-gray-700/60 hover:bg-gray-600/60 text-gray-300 rounded text-xs font-mono font-bold transition">-0.01</button>
+            <button onClick={() => duetApi.sendGCode('M290 R0 S0.01')}
+              className="flex-1 py-1.5 bg-gray-700/60 hover:bg-gray-600/60 text-gray-300 rounded text-xs font-mono font-bold transition">+0.01</button>
+            <button onClick={() => duetApi.sendGCode('M290 R0 S0.05')}
+              className="flex-1 py-1.5 bg-gray-700/60 hover:bg-gray-600/60 text-gray-300 rounded text-xs font-mono font-bold transition">+0.05</button>
+          </div>
+          <div className="text-center text-[10px] text-gray-500 mt-1">
+            Z offset: {model?.move?.babystepZ != null
+              ? `${model.move.babystepZ.toFixed(3)} mm` : '0.000 mm'}
+          </div>
+        </div>
       </div>
 
       {/* ── Three-column layout ── */}
@@ -244,16 +322,42 @@ export default function PrinterControl() {
             </div>
           )}
 
+          {/* Print control (pause/resume/cancel) */}
+          {model?.job?.file?.fileName && (
+            <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+              <h3 className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Print Control</h3>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button onClick={() => duetApi.sendGCode('M25')}
+                  className="py-2 bg-yellow-900/40 hover:bg-yellow-800/50 text-yellow-300 rounded-lg text-[11px] font-medium transition border border-yellow-700/30">Pause</button>
+                <button onClick={() => duetApi.sendGCode('M24')}
+                  className="py-2 bg-green-900/40 hover:bg-green-800/50 text-green-300 rounded-lg text-[11px] font-medium transition border border-green-700/30">Resume</button>
+                <button onClick={() => { if (confirm('Cancel the current print?')) duetApi.sendGCode('M0 H1') }}
+                  className="py-2 bg-red-900/40 hover:bg-red-800/50 text-red-300 rounded-lg text-[11px] font-medium transition border border-red-700/30">Cancel</button>
+              </div>
+            </div>
+          )}
+
           {/* Quick actions */}
           <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
             <h3 className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Quick Actions</h3>
             <div className="grid grid-cols-2 gap-1.5">
               <button onClick={() => duetApi.sendGCode('M84')} className="py-2 bg-gray-800/60 hover:bg-gray-700/60 text-gray-300 rounded-lg text-[11px] transition">Motors Off</button>
-              <button onClick={() => duetApi.sendGCode('M0 H1')} className="py-2 bg-gray-800/60 hover:bg-gray-700/60 text-gray-300 rounded-lg text-[11px] transition">Heaters Off</button>
+              <button onClick={() => duetApi.sendGCode('M140 S-273.15')} className="py-2 bg-gray-800/60 hover:bg-gray-700/60 text-gray-300 rounded-lg text-[11px] transition">Heaters Off</button>
               <button onClick={() => duetApi.sendGCode('M106 S0')} className="py-2 bg-gray-800/60 hover:bg-gray-700/60 text-gray-300 rounded-lg text-[11px] transition">Fans Off</button>
               <button onClick={() => duetApi.sendGCode('M400')} className="py-2 bg-gray-800/60 hover:bg-gray-700/60 text-gray-300 rounded-lg text-[11px] transition">Wait Moves</button>
-              <button onClick={() => runMacro('homeall.g')} className="py-2 bg-gray-800/60 hover:bg-gray-700/60 text-gray-300 rounded-lg text-[11px] transition">Run homeall.g</button>
-              <button onClick={() => runMacro('bed.g')} className="py-2 bg-gray-800/60 hover:bg-gray-700/60 text-gray-300 rounded-lg text-[11px] transition">Run bed.g</button>
+            </div>
+          </div>
+
+          {/* Macros */}
+          <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+            <h3 className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Macros</h3>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button onClick={() => runMacro('homeall.g')} className="py-2 bg-indigo-900/30 hover:bg-indigo-800/40 text-indigo-300 rounded-lg text-[11px] font-medium transition border border-indigo-700/20">homeall.g</button>
+              <button onClick={() => runMacro('homex.g')} className="py-2 bg-indigo-900/30 hover:bg-indigo-800/40 text-indigo-300 rounded-lg text-[11px] font-medium transition border border-indigo-700/20">homex.g</button>
+              <button onClick={() => runMacro('homey.g')} className="py-2 bg-indigo-900/30 hover:bg-indigo-800/40 text-indigo-300 rounded-lg text-[11px] font-medium transition border border-indigo-700/20">homey.g</button>
+              <button onClick={() => runMacro('homez.g')} className="py-2 bg-indigo-900/30 hover:bg-indigo-800/40 text-indigo-300 rounded-lg text-[11px] font-medium transition border border-indigo-700/20">homez.g</button>
+              <button onClick={() => runMacro('bed.g')} className="py-2 bg-indigo-900/30 hover:bg-indigo-800/40 text-indigo-300 rounded-lg text-[11px] font-medium transition border border-indigo-700/20">bed.g</button>
+              <button onClick={() => runMacro('config-override.g')} className="py-2 bg-indigo-900/30 hover:bg-indigo-800/40 text-indigo-300 rounded-lg text-[11px] font-medium transition border border-indigo-700/20">config-override.g</button>
             </div>
           </div>
         </div>
