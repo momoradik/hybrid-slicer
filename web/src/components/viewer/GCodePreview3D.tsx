@@ -106,7 +106,7 @@ function makeMesh(
   return mesh
 }
 
-export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, className, travelX, travelY, travelZ, beds }: Props) {
+export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, className, travelX, travelY, travelZ, beds, originX = 0, originY = 0 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mountRef     = useRef<HTMLDivElement>(null)
 
@@ -254,9 +254,16 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
         scene.add(sprite)
       }
     } else {
-      // Single bed with grid — same visual quality as multi-bed
+      // Single bed — position bed in machine space so it aligns with
+      // translated G-code. bed center = (bedPosX + bw/2 - originX, bedPosY + bd/2 - originY)
+      const bedPosX = beds?.[0]?.positionXMm ?? 0
+      const bedPosY = beds?.[0]?.positionYMm ?? 0
+      const bcx = bedPosX + bw / 2 - originX
+      const bcy = bedPosY + bd / 2 - originY
+
       const gridSize = Math.max(bw, bd) * 1.5
       const grid = new THREE.GridHelper(gridSize, Math.round(gridSize / 20), 0x222244, 0x181828)
+      grid.position.set(bcx, 0, bcy)
       scene.add(grid)
 
       // Bed plate
@@ -265,14 +272,14 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
       const bedMesh = new THREE.Mesh(bedGeo, new THREE.MeshPhongMaterial({
         color: 0x3366cc, side: THREE.DoubleSide, transparent: true, opacity: 0.15,
       }))
-      bedMesh.position.y = 0.05
+      bedMesh.position.set(bcx, 0.05, bcy)
       scene.add(bedMesh)
 
       // Bed outline
       const outlineGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(bw, bd))
       const outline = new THREE.LineSegments(outlineGeo, new THREE.LineBasicMaterial({ color: 0x5588ee }))
       outline.rotateX(-Math.PI / 2)
-      outline.position.y = 0.1
+      outline.position.set(bcx, 0.1, bcy)
       scene.add(outline)
 
       // Travel envelope
@@ -282,7 +289,7 @@ export default function GCodePreview3D({ gcode, buildVolume, lineWidth = 0.4, cl
         new THREE.EdgesGeometry(envGeo),
         new THREE.LineBasicMaterial({ color: 0x333355, transparent: true, opacity: 0.3 }),
       )
-      envWire.position.y = envH / 2
+      envWire.position.set(bcx, envH / 2, bcy)
       scene.add(envWire)
     }
 
