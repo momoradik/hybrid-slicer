@@ -122,6 +122,23 @@ public sealed class CollisionSafetyValidator : ISafetyValidator
             var cmd = parts[0].ToUpperInvariant();
             isRapid = cmd == "G0";
 
+            if (cmd == "G92")
+            {
+                // G92 resets coordinate origin — track the new position
+                foreach (var part in parts.Skip(1))
+                {
+                    if (part.Length < 2) continue;
+                    if (!double.TryParse(part[1..], out var val)) continue;
+                    switch (char.ToUpperInvariant(part[0]))
+                    {
+                        case 'X': x = val; break;
+                        case 'Y': y = val; break;
+                        case 'Z': z = val; break;
+                    }
+                }
+                continue;
+            }
+
             if (cmd is not ("G0" or "G1")) continue;
 
             foreach (var part in parts.Skip(1))
