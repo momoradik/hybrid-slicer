@@ -210,6 +210,16 @@ function MachineConfigInner() {
   const [form, setForm] = useState<MachineForm | null>(null)
   const [highlight, setHighlight] = useState<HighlightKey>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState<string>('')
+
+  const filteredMachines = machines.filter(m => {
+    if (typeFilter && m.type !== typeFilter) return false
+    if (!search) return true
+    const q = search.toLowerCase()
+    return m.name.toLowerCase().includes(q) || m.type.toLowerCase().includes(q)
+      || (m.ipAddress ?? '').toLowerCase().includes(q)
+  })
 
   const createMutation = useMutation({
     mutationFn: machineProfilesApi.create,
@@ -326,16 +336,39 @@ function MachineConfigInner() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold text-white">Machine Configuration</h2>
+        <div>
+          <h2 className="text-2xl font-semibold text-white">Machine Configuration</h2>
+          <p className="text-sm text-gray-500 mt-0.5">{machines.length} machine{machines.length !== 1 ? 's' : ''}</p>
+        </div>
         <button onClick={openNew}
-          className="px-4 py-2 bg-primary/80 hover:bg-primary text-white text-sm rounded-lg">
+          className="px-4 py-2 bg-primary/80 hover:bg-primary text-white text-sm rounded-lg transition">
           + New Machine
         </button>
       </div>
 
+      {/* Search and type filter */}
+      {machines.length > 1 && (
+        <div className="flex gap-3 items-center">
+          <input className="input flex-1 max-w-sm" placeholder="Search machines..."
+            value={search} onChange={e => setSearch(e.target.value)} />
+          <div className="flex gap-1">
+            {['', 'FDM', 'CNC', 'Hybrid'].map(t => (
+              <button key={t}
+                onClick={() => setTypeFilter(t)}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition ${
+                  typeFilter === t
+                    ? 'bg-primary/20 border-primary/40 text-primary/80 font-medium'
+                    : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                }`}
+              >{t || 'All'}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Machine list */}
       <div className="grid gap-4">
-        {machines.map(m => (
+        {filteredMachines.map(m => (
           <div key={m.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 flex items-center justify-between">
             <div>
               <p className="font-medium text-white">{m.name}</p>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toolsApi } from '../api/client'
 import DisabledHint from '../components/DisabledHint'
+import NumericInput from '../components/NumericInput'
 import type { CncTool, ToolType } from '../types'
 
 const TOOL_TYPES: { value: ToolType; label: string; icon: string }[] = [
@@ -196,6 +197,17 @@ export default function ToolLibrary() {
     (editing.toolLengthMm ?? 0) > 0 &&
     (editing.fluteLengthMm ?? 0) > (editing.toolLengthMm ?? 0)
 
+  const [search, setSearch] = useState('')
+
+  const filteredTools = tools.filter(t => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return t.name.toLowerCase().includes(q)
+      || t.type.toLowerCase().includes(q)
+      || t.toolMaterial.toLowerCase().includes(q)
+      || `${t.diameterMm}`.includes(q)
+  })
+
   const set = (k: string, v: string | number) =>
     setEditing(e => e ? { ...e, [k]: v } : e)
 
@@ -218,10 +230,16 @@ export default function ToolLibrary() {
         </button>
       </div>
 
+      {/* Search */}
+      {tools.length > 2 && (
+        <input className="input w-full max-w-sm" placeholder="Search by name, type, material, or diameter..."
+          value={search} onChange={e => setSearch(e.target.value)} />
+      )}
+
       {/* Tool cards grid */}
-      {tools.length > 0 ? (
+      {filteredTools.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {tools.map(t => (
+          {filteredTools.map(t => (
             <ToolCard
               key={t.id}
               tool={t}
@@ -230,11 +248,13 @@ export default function ToolLibrary() {
             />
           ))}
         </div>
-      ) : (
+      ) : tools.length === 0 ? (
         <div className="text-center py-16 bg-gray-900/50 border border-gray-800 rounded-xl">
           <div className="text-4xl text-gray-700 mb-3">No tools yet</div>
           <p className="text-gray-500 text-sm">Click <span className="text-primary/80 font-medium">+ Add Tool</span> to define your first CNC tool.</p>
         </div>
+      ) : (
+        <p className="text-gray-500 text-sm text-center py-8">No tools match "{search}"</p>
       )}
 
       {/* ── Add / Edit modal ── */}
@@ -303,27 +323,22 @@ export default function ToolLibrary() {
                   <div className="grid grid-cols-3 gap-3">
                     <FormField label="Diameter (mm)" labelColor="text-violet-400"
                       tooltip="Cutting diameter — sets milling pass width and cutter-radius compensation.">
-                      <input type="number" min={0.1} step={0.1} className="input w-full"
-                        value={editing.diameterMm ?? ''} onChange={e => set('diameterMm', +e.target.value)} />
+                      <NumericInput min={0.1} step={0.1} value={editing.diameterMm ?? 3} onChange={v => set('diameterMm', v)} />
                     </FormField>
                     <FormField label="Flute Length (mm)" labelColor="text-orange-400"
                       tooltip="Length of cutting edges. Sets maximum axial depth of cut.">
-                      <input type="number" min={0.5} step={0.5} className="input w-full"
-                        value={editing.fluteLengthMm ?? ''} onChange={e => set('fluteLengthMm', +e.target.value)} />
+                      <NumericInput min={0.5} step={0.5} value={editing.fluteLengthMm ?? 12} onChange={v => set('fluteLengthMm', v)} />
                     </FormField>
                     <FormField label="Tool Length (mm)" labelColor="text-blue-400"
                       tooltip="Spindle collet to tip. Used for clearance safety checks.">
-                      <input type="number" min={1} step={1} className="input w-full"
-                        value={editing.toolLengthMm ?? ''} onChange={e => set('toolLengthMm', +e.target.value)} />
+                      <NumericInput min={1} step={1} value={editing.toolLengthMm ?? 50} onChange={v => set('toolLengthMm', v)} />
                     </FormField>
                     <FormField label="Shank Diameter (mm)"
                       tooltip="Non-cutting portion held in collet. Used for pocket-access checks.">
-                      <input type="number" min={0} step={0.1} className="input w-full"
-                        value={editing.shankDiameterMm ?? ''} onChange={e => set('shankDiameterMm', +e.target.value)} />
+                      <NumericInput min={0} step={0.1} value={editing.shankDiameterMm ?? 3} onChange={v => set('shankDiameterMm', v)} />
                     </FormField>
                     <FormField label="Flute Count" tooltip="Number of cutting edges.">
-                      <input type="number" min={1} max={12} step={1} className="input w-full"
-                        value={editing.fluteCount ?? ''} onChange={e => set('fluteCount', +e.target.value)} />
+                      <NumericInput min={1} max={12} step={1} value={editing.fluteCount ?? 2} onChange={v => set('fluteCount', v)} />
                     </FormField>
                     <FormField label="Material" tooltip="Tool material (HSS, Carbide, Cobalt).">
                       <input className="input w-full" placeholder="Carbide"
@@ -344,16 +359,13 @@ export default function ToolLibrary() {
                   <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2 font-medium">Cutting Parameters</p>
                   <div className="grid grid-cols-3 gap-3">
                     <FormField label="Max Depth of Cut (mm)" tooltip="Maximum axial depth per pass.">
-                      <input type="number" min={0} step={0.1} className="input w-full"
-                        value={editing.maxDepthOfCutMm ?? ''} onChange={e => set('maxDepthOfCutMm', +e.target.value)} />
+                      <NumericInput min={0} step={0.1} value={editing.maxDepthOfCutMm ?? 0.5} onChange={v => set('maxDepthOfCutMm', v)} />
                     </FormField>
                     <FormField label="Spindle RPM" tooltip="Recommended speed. Used in M3 S command.">
-                      <input type="number" min={100} step={500} className="input w-full"
-                        value={editing.recommendedRpm ?? ''} onChange={e => set('recommendedRpm', +e.target.value)} />
+                      <NumericInput min={100} step={500} value={editing.recommendedRpm ?? 10000} onChange={v => set('recommendedRpm', v)} />
                     </FormField>
                     <FormField label="Feed Rate (mm/min)" tooltip="Recommended XY feed rate during cutting.">
-                      <input type="number" min={10} step={10} className="input w-full"
-                        value={editing.recommendedFeedMmPerMin ?? ''} onChange={e => set('recommendedFeedMmPerMin', +e.target.value)} />
+                      <NumericInput min={10} step={10} value={editing.recommendedFeedMmPerMin ?? 500} onChange={v => set('recommendedFeedMmPerMin', v)} />
                     </FormField>
                   </div>
                 </div>

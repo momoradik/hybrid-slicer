@@ -53,12 +53,13 @@ export default function InfoTip({
       <span
         role="tooltip"
         className={`
-          pointer-events-none absolute z-50 left-1/2 -translate-x-1/2 ${position}
+          pointer-events-none absolute z-50 ${position}
+          left-0 sm:left-1/2 sm:-translate-x-1/2
           px-3 py-2 rounded-lg text-xs leading-snug text-gray-200
           bg-gray-800 border border-gray-600 shadow-lg
-          w-64 max-w-[16rem] whitespace-normal text-left
+          w-56 whitespace-normal text-left
           opacity-0 group-hover:opacity-100 group-focus-within:opacity-100
-          transition-opacity duration-150
+          transition-opacity duration-200
         `}
       >
         {text}

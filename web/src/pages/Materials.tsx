@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { materialsApi } from '../api/client'
 import DisabledHint from '../components/DisabledHint'
+import NumericInput from '../components/NumericInput'
 import type { Material } from '../types'
 
 // ── Temperature bar visualization ─────────────────────────────────────────────
@@ -74,17 +75,7 @@ function MField({ label, children }: { label: string; children: React.ReactNode 
   )
 }
 
-function NumInput({
-  value, min, max, step = 1, onChange,
-}: {
-  value: number; min?: number; max?: number; step?: number
-  onChange: (v: number) => void
-}) {
-  return (
-    <input type="number" className="input text-sm w-full" value={value} min={min} max={max} step={step}
-      onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(v) }} />
-  )
-}
+// NumInput is now the shared NumericInput component
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -193,13 +184,17 @@ export default function Materials() {
 
             {/* Nozzle Temperature */}
             <div>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2 font-medium">Nozzle Temperature</p>
+              <div className="flex items-center gap-1.5 mb-2">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">Nozzle Temperature</p>
+                <span title="Set the safe printing temperature range for this material. The MAX value is what the slicer uses during printing. The MIN value is for reference — e.g. the lowest temp that still extrudes reliably."
+                  className="cursor-help text-gray-600 hover:text-gray-400 text-[10px]">?</span>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <MField label="Min (°C)">
-                  <NumInput value={form.printTempMinDegC ?? 200} min={100} max={400} onChange={v => set('printTempMinDegC', v)} />
+                  <NumericInput value={form.printTempMinDegC ?? 200} min={100} max={400} onChange={v => set('printTempMinDegC', v)} />
                 </MField>
                 <MField label="Max (°C)">
-                  <NumInput value={form.printTempMaxDegC ?? 230} min={100} max={400} onChange={v => set('printTempMaxDegC', v)} />
+                  <NumericInput value={form.printTempMaxDegC ?? 230} min={100} max={400} onChange={v => set('printTempMaxDegC', v)} />
                 </MField>
               </div>
               <p className="text-[10px] text-gray-600 mt-1">The max temperature is used during slicing.</p>
@@ -208,7 +203,11 @@ export default function Materials() {
             {/* Bed Temperature */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">Bed Temperature</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">Bed Temperature</p>
+                  <span title="Heated bed helps with first-layer adhesion and reduces warping. Set the range your material needs. The MAX value is used by the slicer. Disable for materials that don't need a heated bed (e.g. PLA on textured PEI)."
+                    className="cursor-help text-gray-600 hover:text-gray-400 text-[10px]">?</span>
+                </div>
                 <button
                   onClick={() => {
                     if (bedEnabled) { set('bedTempMinDegC', 0); set('bedTempMaxDegC', 0) }
@@ -226,10 +225,10 @@ export default function Materials() {
               {bedEnabled && (
                 <div className="grid grid-cols-2 gap-3">
                   <MField label="Min (°C)">
-                    <NumInput value={form.bedTempMinDegC ?? 50} min={1} max={150} onChange={v => set('bedTempMinDegC', v)} />
+                    <NumericInput value={form.bedTempMinDegC ?? 50} min={1} max={150} onChange={v => set('bedTempMinDegC', v)} />
                   </MField>
                   <MField label="Max (°C)">
-                    <NumInput value={form.bedTempMaxDegC ?? 70} min={1} max={150} onChange={v => set('bedTempMaxDegC', v)} />
+                    <NumericInput value={form.bedTempMaxDegC ?? 70} min={1} max={150} onChange={v => set('bedTempMaxDegC', v)} />
                   </MField>
                 </div>
               )}
@@ -241,7 +240,7 @@ export default function Materials() {
             {/* Filament */}
             <div className="grid grid-cols-2 gap-3">
               <MField label="Filament Diameter (mm)">
-                <NumInput value={form.diameterMm ?? 1.75} min={0.5} max={5} step={0.05} onChange={v => set('diameterMm', v)} />
+                <NumericInput value={form.diameterMm ?? 1.75} min={0.5} max={5} step={0.05} onChange={v => set('diameterMm', v)} />
               </MField>
             </div>
 
