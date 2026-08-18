@@ -523,6 +523,10 @@ export default function HybridPlanner() {
           buildVolume={buildVolume}
           toolDiameterMm={selectedTool?.diameterMm ?? 3}
           unmachinableRegions={unmachinableRegions}
+          bedPositionX={selectedMachine?.bedPositionXMm}
+          bedPositionY={selectedMachine?.bedPositionYMm}
+          originX={selectedMachine?.originXMm}
+          originY={selectedMachine?.originYMm}
           className="flex-1"
         />
       )}

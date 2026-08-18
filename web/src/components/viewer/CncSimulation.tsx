@@ -18,6 +18,10 @@ interface Props {
   toolDiameterMm?: number
   unmachinableRegions?: UnmachinableRegion[]
   className?: string
+  bedPositionX?: number
+  bedPositionY?: number
+  originX?: number
+  originY?: number
 }
 
 interface SimMove {
@@ -178,7 +182,7 @@ const LEGEND_ITEMS: { key: VisKey; label: string; color: string }[] = [
 ]
 
 export default function CncSimulation({
-  toolpathGCode, printGCode, buildVolume, toolDiameterMm = 3,
+  toolpathGCode, printGCode, buildVolume, toolDiameterMm = 3, bedPositionX = 0, bedPositionY = 0, originX = 0, originY = 0,
   unmachinableRegions = [], className,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null)
@@ -276,10 +280,13 @@ export default function CncSimulation({
     controls.dampingFactor = 0.1
     controlsRef.current = controls
 
-    // ── Bed ───────────────────────────────────────────────────────────────
+    // ── Bed — positioned in machine space ──────────────────────────────
     const bw = buildVolume.width, bd = buildVolume.depth
+    // Bed center in machine coordinates (matches G-code frame after translation)
+    const bcx = bedPositionX + bw / 2 - originX
+    const bcz = bedPositionY + bd / 2 - originY
     const hw = bw / 2, hd = bd / 2
-    scene.add(new THREE.LineSegments(
+    const bedOutline = new THREE.LineSegments(
       new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(-hw,0,-hd), new THREE.Vector3(hw,0,-hd),
         new THREE.Vector3(hw,0,-hd),  new THREE.Vector3(hw,0,hd),
@@ -287,12 +294,15 @@ export default function CncSimulation({
         new THREE.Vector3(-hw,0,hd),  new THREE.Vector3(-hw,0,-hd),
       ]),
       new THREE.LineBasicMaterial({ color: 0x1e293b }),
-    ))
+    )
+    bedOutline.position.set(bcx, 0, bcz)
+    scene.add(bedOutline)
     const bedMesh = new THREE.Mesh(
       new THREE.PlaneGeometry(bw, bd),
       new THREE.MeshStandardMaterial({ color: 0x0f172a, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
     )
     bedMesh.rotation.x = -Math.PI / 2
+    bedMesh.position.set(bcx, 0, bcz)
     scene.add(bedMesh)
 
     // ── Printed part (static) ─────────────────────────────────────────────
