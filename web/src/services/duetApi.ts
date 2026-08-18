@@ -207,13 +207,18 @@ export function statusColor(s: string): string {
 
 // ── API Calls ────────────────────────────────────────────────────────────
 
-/** Get the full or partial object model */
+/** Get the full or partial object model.
+ *  RRF 3.x returns `{ result: { ... } }`, older versions may return the model directly. */
 export async function getModel(key = '', flags = 'd99vn'): Promise<DuetModel> {
   const params = new URLSearchParams()
   if (key) params.set('key', key)
   params.set('flags', flags)
-  const { data } = await http.get<{ result: DuetModel }>(`/rr_model?${params}`)
-  return data.result ?? data as unknown as DuetModel
+  const { data } = await http.get<any>(`/rr_model?${params}`)
+  const model = data?.result ?? data
+  // Ensure heat/tools arrays exist so downstream code doesn't crash on missing fields
+  if (model && !model.heat) model.heat = { heaters: [], bedHeaters: [], chamberHeaters: [] }
+  if (model && !model.tools) model.tools = []
+  return model as DuetModel
 }
 
 /** Get status (legacy rr_status type 1/2/3) */

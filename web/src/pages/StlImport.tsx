@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import DisabledHint from '../components/DisabledHint'
 import InfoTip from '../components/InfoTip'
+import Toggle from '../components/Toggle'
 import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js'
@@ -1039,15 +1040,7 @@ export default function StlImport() {
         {/* Support Settings */}
         <section className="space-y-2">
           <SectionHeader>Support</SectionHeader>
-          <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={supportEnabled}
-              onChange={e => setSupportEnabled(e.target.checked)}
-              className="accent-primary"
-            />
-            Enable Support
-          </label>
+          <Toggle checked={supportEnabled} onChange={setSupportEnabled} label="Enable Support" />
           {supportEnabled && (
             <>
               <div className="space-y-1 mt-1">
@@ -1192,16 +1185,8 @@ export default function StlImport() {
         <section className="space-y-2">
           <SectionHeader>G-code Startup</SectionHeader>
           <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-              <input type="checkbox" checked={gcodeHoming}
-                onChange={e => setGcodeHoming(e.target.checked)} className="accent-primary" />
-              Home all axes (G28)
-            </label>
-            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-              <input type="checkbox" checked={gcodeLevelling}
-                onChange={e => setGcodeLevelling(e.target.checked)} className="accent-primary" />
-              Bed levelling (G29)
-            </label>
+            <Toggle checked={gcodeHoming} onChange={setGcodeHoming} label="Home all axes (G28)" />
+            <Toggle checked={gcodeLevelling} onChange={setGcodeLevelling} label="Bed levelling (G29)" />
           </div>
           <p className="text-[10px] text-gray-600">
             Selected commands are inserted at the start of the G-code, replacing Cura defaults.
@@ -1213,18 +1198,10 @@ export default function StlImport() {
         {/* Custom G-code blocks opt-in */}
         <section className="space-y-2">
           <SectionHeader>Custom G-code Blocks</SectionHeader>
-          <label className="flex items-start gap-2 text-sm text-gray-300 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={applyCustomGCodeBlocks}
-              onChange={e => setApplyCustomGCodeBlocks(e.target.checked)}
-              className="accent-primary mt-0.5"
-            />
-            <span className="flex items-center gap-1.5">
-              Apply custom G-code blocks
-              <InfoTip text="When ticked, the active blocks defined for this machine on the G-code Customisation page — plus any shared blocks — are injected into the generated G-code. Untick to slice this job without them." />
-            </span>
-          </label>
+          <div className="flex items-center gap-2">
+            <Toggle checked={applyCustomGCodeBlocks} onChange={setApplyCustomGCodeBlocks} label="Apply custom G-code blocks" />
+            <InfoTip text="When enabled, the active blocks defined for this machine on the G-code Customisation page — plus any shared blocks — are injected into the generated G-code. Disable to slice this job without them." />
+          </div>
           <p className="text-[10px] text-gray-600">
             {applyCustomGCodeBlocks
               ? 'This machine’s active blocks (and shared blocks) will be included in the output.'
@@ -1342,21 +1319,9 @@ export default function StlImport() {
               )}
 
               <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                  <input type="checkbox" checked={autoMachiningFrequency}
-                    onChange={e => setAutoMachiningFrequency(e.target.checked)} className="accent-primary" />
-                  Auto machining frequency
-                </label>
-                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                  <input type="checkbox" checked={machineInnerWalls}
-                    onChange={e => setMachineInnerWalls(e.target.checked)} className="accent-primary" />
-                  Machine inner walls
-                </label>
-                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                  <input type="checkbox" checked={avoidSupports}
-                    onChange={e => setAvoidSupports(e.target.checked)} className="accent-primary" />
-                  Avoid supports
-                </label>
+                <Toggle checked={autoMachiningFrequency} onChange={setAutoMachiningFrequency} label="Auto machining frequency" />
+                <Toggle checked={machineInnerWalls} onChange={setMachineInnerWalls} label="Machine inner walls" />
+                <Toggle checked={avoidSupports} onChange={setAvoidSupports} label="Avoid supports" />
                 {avoidSupports && (
                   <Field label="Support clearance (mm)">
                     <input type="number" min={0} max={10} step={0.1} value={supportClearanceMm}
@@ -1601,10 +1566,10 @@ export default function StlImport() {
             <button
               onClick={handlePreview}
               disabled={!canPreview}
-              className="flex-1 py-2.5 bg-gray-700/80 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed
-                         text-white rounded-lg font-medium transition-colors border border-gray-600"
+              className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed
+                         text-gray-200 rounded-lg font-medium transition-colors border border-gray-700"
             >
-              {isPreviewLoading ? 'Slicing…' : 'Slice'}
+              {isPreviewLoading ? 'Slicing...' : 'Preview Slice'}
             </button>
           </DisabledHint>
           <DisabledHint when={!canSubmit} reason={

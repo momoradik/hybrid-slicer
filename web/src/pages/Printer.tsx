@@ -40,22 +40,24 @@ export default function Printer() {
     refetchInterval: 4000,
   })
 
+  const { clearTempHistory } = useDuetStore()
   const pollStatus = useCallback(async () => {
     try {
       const model = await duetApi.getModel()
       setModel(model)
       pushTempSample(model)
     } catch {
-      // poll failure is non-fatal
+      // poll failure is non-fatal — will retry on next interval
     }
   }, [setModel, pushTempSample])
 
   // Start/stop polling when connected/disconnected
   useEffect(() => {
     if (machineConnected && !polling) {
+      clearTempHistory() // reset temperature history timeline on reconnect
       setPolling(true)
       pollStatus() // immediate first poll
-      pollRef.current = setInterval(pollStatus, 1000)
+      pollRef.current = setInterval(pollStatus, 2000) // 2s interval (less aggressive)
     }
     return () => {
       if (pollRef.current) {
