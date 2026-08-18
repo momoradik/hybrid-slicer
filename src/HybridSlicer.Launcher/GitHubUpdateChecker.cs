@@ -79,6 +79,10 @@ public sealed class GitHubUpdateChecker : IDisposable
                 if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
                     response.StatusCode == System.Net.HttpStatusCode.Forbidden)
                     UpdateError?.Invoke("GitHub authentication failed. Update token may be missing or expired.");
+                else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    UpdateError?.Invoke("Could not reach update server. The repository may be private — please reinstall to get the latest update token.");
+                else
+                    UpdateError?.Invoke($"Update check failed (HTTP {(int)response.StatusCode}).");
                 return;
             }
 
