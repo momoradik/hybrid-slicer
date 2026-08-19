@@ -60,7 +60,7 @@ function parseGCode(gcode: string): { segments: Segment[]; maxGcodeZ: number } {
       const er = up.match(/E([+-]?[\d.]+)/); if (er) e = parseFloat(er[1])
       continue
     }
-    if (!up.startsWith('G0') && !up.startsWith('G1')) continue
+    if (!(up.startsWith('G0 ') || up.startsWith('G1 ') || up.startsWith('G00 ') || up.startsWith('G01 ') || up === 'G0' || up === 'G1')) continue
 
     const xm = up.match(/X([+-]?[\d.]+)/)
     const ym = up.match(/Y([+-]?[\d.]+)/)

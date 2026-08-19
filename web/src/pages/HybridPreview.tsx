@@ -82,7 +82,7 @@ function parsePrintGCode(gcode: string, extruderAxes: string = 'XYZ'): ParsedPri
     const line = t.split(';')[0].trim()
     if (!line) continue
     const up = line.toUpperCase()
-    if (!up.startsWith('G0') && !up.startsWith('G1')) continue
+    if (!(up.startsWith('G0 ') || up.startsWith('G1 ') || up.startsWith('G00 ') || up.startsWith('G01 ') || up === 'G0' || up === 'G1')) continue
 
     const xm = ax.x.exec(' ' + up), ym = ax.y.exec(' ' + up)
     const zm = ax.z.exec(' ' + up), em = up.match(/(?:^|\s)E([+-]?[\d.]+)/)
@@ -300,7 +300,7 @@ function parseHybridGCode(
       continue
     }
 
-    if (!up.startsWith('G0') && !up.startsWith('G1')) continue
+    if (!(up.startsWith('G0 ') || up.startsWith('G1 ') || up.startsWith('G00 ') || up.startsWith('G01 ') || up === 'G0' || up === 'G1')) continue
 
     // Pick axis mapping by current mode: CNC sections in hybrid.gcode use the
     // machine's CNC axis letters; PRINT sections use the extruder's letters.
