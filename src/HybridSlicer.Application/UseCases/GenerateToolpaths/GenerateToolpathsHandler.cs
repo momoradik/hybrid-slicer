@@ -193,6 +193,7 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
 
             var autoLayers    = new List<int>();
             var lastMachinedZ = 0.0;
+            var autoPartCount = 0; // track part layers for skip logic
 
             for (var layerIdx = 1; layerIdx <= job.TotalPrintLayers!.Value; layerIdx++)
             {
@@ -200,6 +201,12 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                 var effectiveZ = currentZ + cmd.ZSafetyOffsetMm;
                 var pending    = currentZ - lastMachinedZ;
                 var curaIdx    = layerIdx - 1;
+
+                // Respect SkipMachiningLayers even in auto mode
+                var hasWalls = parsed.Layers.TryGetValue(curaIdx, out var skipLd)
+                    && (skipLd.OuterWallPaths.Count > 0 || skipLd.InnerWallPaths.Count > 0);
+                if (hasWalls) autoPartCount++;
+                if (autoPartCount <= cmd.SkipMachiningLayers) continue;
 
                 // (1) Flute reach: accumulated uncut height ≥ 80% of flute length
                 var fluteTriggered = tool.FluteLengthMm > 0 && pending >= tool.FluteLengthMm * 0.8;
