@@ -74,19 +74,24 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
         var cncOffset = machine.CncOffset;
 
         // ── Depth-of-cut validation ───────────────────────────────────────────
+        var warnings = new List<string>();
         var axialDepthMm = cmd.MachineEveryNLayers * profile.LayerHeightMm;
         if (axialDepthMm > tool.MaxDepthOfCutMm)
-            _logger.LogWarning(
-                "Axial depth {D:F3} mm exceeds tool MaxDepthOfCut {M:F3} mm " +
-                "(machineEveryN={N} × layerHeight={H}). Proceeding with caution.",
-                axialDepthMm, tool.MaxDepthOfCutMm,
-                cmd.MachineEveryNLayers, profile.LayerHeightMm);
+        {
+            var msg = $"Axial depth {axialDepthMm:F1} mm exceeds tool max depth of cut {tool.MaxDepthOfCutMm:F1} mm " +
+                $"({cmd.MachineEveryNLayers} layers × {profile.LayerHeightMm} mm). Risk of tool breakage or poor finish.";
+            warnings.Add(msg);
+            _logger.LogWarning(msg);
+        }
 
         // ── FluteTooShort global check ────────────────────────────────────────
         // If the user's axial depth already exceeds the flute length, flag it immediately.
         var globalFluteTooShort = tool.FluteLengthMm > 0
             && axialDepthMm > tool.FluteLengthMm
             && !cmd.AutoMachiningFrequency;
+        if (globalFluteTooShort)
+            warnings.Add($"Axial depth {axialDepthMm:F1} mm exceeds flute length {tool.FluteLengthMm:F1} mm. " +
+                "The shank will rub against the part. Consider using auto machining frequency or reducing the interval.");
 
         // ── Parse Cura G-code for wall paths ─────────────────────────────────
         _logger.LogInformation("Parsing Cura G-code: {Path}", job.PrintGCodePath);
@@ -551,7 +556,7 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                 "Toolpath generation complete for {JobId}: {Count} layers machined, {UR} unmachinable regions",
                 cmd.JobId, machinedLayers.Count, allUnmachinableRegions.Count);
 
-            return new GenerateToolpathsResult(cmd.JobId, machinedLayers.Count, machinedLayers, allUnmachinableRegions);
+            return new GenerateToolpathsResult(cmd.JobId, machinedLayers.Count, machinedLayers, allUnmachinableRegions, warnings);
         }
         catch (Exception ex)
         {

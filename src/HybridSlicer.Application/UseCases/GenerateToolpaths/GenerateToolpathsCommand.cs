@@ -52,4 +52,5 @@ public sealed record GenerateToolpathsResult(
     Guid                 JobId,
     int                  ToolpathCount,
     IReadOnlyList<int>   MachinedAtLayers,
-    IReadOnlyList<UnmachinableRegion> UnmachinableRegions);
+    IReadOnlyList<UnmachinableRegion> UnmachinableRegions,
+    IReadOnlyList<string> Warnings);
