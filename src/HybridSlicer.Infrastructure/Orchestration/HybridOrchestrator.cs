@@ -58,8 +58,16 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
         int printStart = 0; // last layer that has been flushed into output
 
         // Use the actual machined layers from the parsed toolpath (sorted ascending).
-        // This correctly handles both manual-interval and auto-machining-frequency scheduling.
-        var sortedLayers = request.CncGCodeByLayer.Keys.OrderBy(x => x).ToList();
+        // Filter out comment-only layers (skipped due to SpindleCollision, ToolTooWide, etc.)
+        // to avoid unnecessary tool changes and spindle on/off for empty passes.
+        var sortedLayers = request.CncGCodeByLayer
+            .Where(kv => kv.Value.Split('\n').Any(l => {
+                var t = l.TrimStart();
+                return t.Length > 0 && !t.StartsWith(';');
+            }))
+            .Select(kv => kv.Key)
+            .OrderBy(x => x)
+            .ToList();
 
         for (var i = 0; i < sortedLayers.Count; i++)
         {
