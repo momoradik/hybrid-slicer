@@ -208,7 +208,8 @@ public sealed class GitHubUpdateChecker : IDisposable
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            string? assetUrl = null;
+            string? assetApiUrl = null;
+            string? assetBrowserUrl = null;
             string? assetName = null;
 
             foreach (var asset in root.GetProperty("assets").EnumerateArray())
@@ -218,24 +219,51 @@ public sealed class GitHubUpdateChecker : IDisposable
                     name.EndsWith("-Installer.exe", StringComparison.OrdinalIgnoreCase) ||
                     (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && name.Contains("Setup", StringComparison.OrdinalIgnoreCase)))
                 {
-                    assetUrl = asset.GetProperty("url").GetString();
+                    assetApiUrl = asset.GetProperty("url").GetString();
+                    assetBrowserUrl = asset.GetProperty("browser_download_url").GetString();
                     assetName = name;
                     break;
                 }
             }
 
-            if (assetUrl is null) { UpdateError?.Invoke("Installer not found in release."); return; }
+            if (assetApiUrl is null && assetBrowserUrl is null) { UpdateError?.Invoke("Installer not found in release."); return; }
 
             var destPath = Path.Combine(_downloadDir, assetName!);
 
-            // Download via API URL with Accept: application/octet-stream (works for private repos)
-            using var dlRequest = new HttpRequestMessage(HttpMethod.Get, assetUrl);
-            dlRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/octet-stream"));
-            if (_token is not null)
-                dlRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
-            dlRequest.Headers.UserAgent.Add(new ProductInfoHeaderValue("HybridSlicer", _currentVersion.ToString()));
-            using var dlResponse = await _http.SendAsync(dlRequest, HttpCompletionOption.ResponseHeadersRead);
-            if (!dlResponse.IsSuccessStatusCode) { UpdateError?.Invoke($"Download failed: {dlResponse.StatusCode}"); return; }
+            // Try API URL first (works with token for private repos), then fall back to
+            // browser_download_url (direct download, works for public repos without auth).
+            HttpResponseMessage? dlResponse = null;
+
+            if (assetApiUrl is not null)
+            {
+                using var dlRequest = new HttpRequestMessage(HttpMethod.Get, assetApiUrl);
+                dlRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/octet-stream"));
+                if (_token is not null)
+                    dlRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+                dlRequest.Headers.UserAgent.Add(new ProductInfoHeaderValue("HybridSlicer", _currentVersion.ToString()));
+                dlResponse = await _http.SendAsync(dlRequest, HttpCompletionOption.ResponseHeadersRead);
+                if (!dlResponse.IsSuccessStatusCode)
+                {
+                    Log($"API asset download failed: {dlResponse.StatusCode}, trying browser URL...");
+                    dlResponse.Dispose();
+                    dlResponse = null;
+                }
+            }
+
+            // Fallback: direct browser download URL (no auth needed for public repos)
+            if (dlResponse is null && assetBrowserUrl is not null)
+            {
+                using var fallbackRequest = new HttpRequestMessage(HttpMethod.Get, assetBrowserUrl);
+                fallbackRequest.Headers.UserAgent.Add(new ProductInfoHeaderValue("HybridSlicer", _currentVersion.ToString()));
+                dlResponse = await _http.SendAsync(fallbackRequest, HttpCompletionOption.ResponseHeadersRead);
+            }
+
+            if (dlResponse is null || !dlResponse.IsSuccessStatusCode)
+            {
+                UpdateError?.Invoke($"Download failed. Download manually from:\n{ReleasesUrl}");
+                dlResponse?.Dispose();
+                return;
+            }
 
             var totalBytes = dlResponse.Content.Headers.ContentLength ?? -1;
             await using var contentStream = await dlResponse.Content.ReadAsStreamAsync();
