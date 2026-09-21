@@ -374,6 +374,9 @@ export default function StlImport() {
   // Clear face-selected badge when selection changes
   useEffect(() => { setHasFaceSelected(false) }, [selectedId])
 
+  // ── Copy / paste clipboard for models ────────────────────────────────────
+  const clipboardRef = useRef<ModelState | null>(null)
+
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -391,12 +394,42 @@ export default function StlImport() {
           setModels(prev => prev.map(m => m.id === entry.modelId
             ? { ...m, transform: { ...entry.transform } } : m))
         }
+        return
+      }
+      // Ctrl+C — copy selected model
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        const sel = models.find(m => m.id === selectedId)
+        if (sel) {
+          e.preventDefault()
+          clipboardRef.current = sel
+        }
+        return
+      }
+      // Ctrl+V — paste copied model with small offset
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        const src = clipboardRef.current
+        if (src) {
+          e.preventDefault()
+          const id = mkId()
+          const url = URL.createObjectURL(src.file)
+          const entry: ModelState = {
+            id, file: src.file, url,
+            name: src.name,
+            transform: { ...src.transform, x: src.transform.x + 15, y: src.transform.y + 15 },
+            size: src.size ? { ...src.size } : null,
+            isOutOfBounds: false,
+            bedIndex: activeBedIndex,
+          }
+          setModels(prev => [...prev, entry])
+          setSelectedId(id)
+        }
+        return
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId])
+  }, [selectedId, models, activeBedIndex])
 
   // ── Model helpers ──────────────────────────────────────────────────────────
 
