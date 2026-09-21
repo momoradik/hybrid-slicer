@@ -126,6 +126,7 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
                 // Internal pipeline always uses bed-centre origin for STL viewer / preview consistency.
                 // OriginMode in the machine profile is for documentation and future firmware output.
                 OriginIsBedCenter:     true,
+                GCodeFlavor:           machine.GCodeFlavor,
                 MaterialFlowPct:       profile.MaterialFlowPct,
                 PelletModeEnabled:             profile.PelletModeEnabled,
                 PressureAdvanceFactor:         profile.PressureAdvanceFactor,

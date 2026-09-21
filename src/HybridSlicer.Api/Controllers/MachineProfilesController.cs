@@ -76,6 +76,7 @@ public sealed class MachineProfilesController : ControllerBase
         if (req.SafeClearanceHeightMm.HasValue)
             profile.SetSafeClearanceHeight(req.SafeClearanceHeightMm.Value);
 
+        if (req.GCodeFlavor is not null) profile.SetGCodeFlavor(req.GCodeFlavor);
         if (req.ExtruderAxes is not null) profile.SetExtruderAxes(req.ExtruderAxes);
         if (req.CncAxes is not null) profile.SetCncAxes(req.CncAxes);
         if (req.MotionAssignmentEnabled.HasValue || req.MotionAssignmentJson is not null)
@@ -167,6 +168,7 @@ public sealed class MachineProfilesController : ControllerBase
         if (req.SafeClearanceHeightMm.HasValue)
             profile.SetSafeClearanceHeight(req.SafeClearanceHeightMm.Value);
 
+        if (req.GCodeFlavor is not null) profile.SetGCodeFlavor(req.GCodeFlavor);
         if (req.ExtruderAxes is not null) profile.SetExtruderAxes(req.ExtruderAxes);
         if (req.CncAxes is not null) profile.SetCncAxes(req.CncAxes);
         if (req.MotionAssignmentEnabled.HasValue || req.MotionAssignmentJson is not null)
@@ -230,6 +232,7 @@ public record CreateMachineProfileRequest(
     int Port = 8080,
     OffsetDto? CncOffset = null,
     double? SafeClearanceHeightMm = null,
+    string? GCodeFlavor = null,
     string? ExtruderAxes = null,
     string? CncAxes = null,
     bool? MotionAssignmentEnabled = null,
@@ -261,6 +264,7 @@ public record UpdateMachineProfileRequest(
     int? Port = null,
     OffsetDto? CncOffset = null,
     double? SafeClearanceHeightMm = null,
+    string? GCodeFlavor = null,
     string? ExtruderAxes = null,
     string? CncAxes = null,
     bool? MotionAssignmentEnabled = null,

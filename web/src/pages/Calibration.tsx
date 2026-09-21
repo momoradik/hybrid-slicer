@@ -15,12 +15,16 @@ function calcE(nozzle: number, h: number, len: number, diam: number, flowPct: nu
 function flowLinesGCode(
   nozzle: number, h: number, speed: number, diam: number, flowPct: number,
   extTemp: number, bedTemp: number, ox: number, oy: number,
+  travelSpeed: number,
+  retractEnabled: boolean, retractLen: number, retractSpeed: number,
 ): string {
   const steps = [80, 85, 90, 95, 100, 105, 110, 115, 120]
   const lineLen = 80
   const yGap = 10
   const startX = 20 + ox
   const startY = 20 + oy
+  const travelF = (travelSpeed * 60).toFixed(0)
+  const retractF = (retractSpeed * 60).toFixed(0)
 
   const lines: string[] = [
     '; ============================================================',
@@ -41,7 +45,7 @@ function flowLinesGCode(
     const y = startY + i * yGap
     const e = calcE(nozzle, h, lineLen, diam, flow)
     lines.push(`; --- Flow ${flow}% ---`)
-    lines.push(`G0 X${startX.toFixed(1)} Y${y.toFixed(1)} Z${h.toFixed(3)} F5000`)
+    lines.push(`G0 X${startX.toFixed(1)} Y${y.toFixed(1)} Z${h.toFixed(3)} F${travelF}`)
     lines.push('G92 E0')
     lines.push(`G1 X${(startX + lineLen).toFixed(1)} Y${y.toFixed(1)} E${e.toFixed(4)} F${(speed * 60).toFixed(0)}`)
 
@@ -50,12 +54,14 @@ function flowLinesGCode(
     const bumps = Math.floor(flow / 10) - 7 // 80%=1 bump, 90%=2, 100%=3, etc.
     for (let b = 0; b < bumps; b++) {
       const bx = labelX + b * 3
-      lines.push(`G0 X${bx.toFixed(1)} Y${(y - 1.5).toFixed(1)} Z${h.toFixed(3)} F5000`)
+      lines.push(`G0 X${bx.toFixed(1)} Y${(y - 1.5).toFixed(1)} Z${h.toFixed(3)} F${travelF}`)
       lines.push('G92 E0')
       lines.push(`G1 X${(bx + 1.5).toFixed(1)} Y${(y + 1.5).toFixed(1)} E${calcE(nozzle, h, 4, diam, flow).toFixed(4)} F${(speed * 60).toFixed(0)}`)
     }
 
-    lines.push(`G1 E${Math.max(0, e - 2).toFixed(4)} F2700 ; retract`)
+    if (retractEnabled) {
+      lines.push(`G1 E${Math.max(0, e - retractLen).toFixed(4)} F${retractF} ; retract`)
+    }
     lines.push(`G0 Z${(h + 2).toFixed(2)} F3000`)
     lines.push('')
   })
@@ -68,6 +74,9 @@ function tempTestGCode(
   nozzle: number, h: number, speed: number, diam: number, flowPct: number,
   tempMin: number, tempMax: number, tempStep: number, bedTemp: number,
   ox: number, oy: number,
+  travelSpeed: number, firstLayerSpeed: number,
+  retractEnabled: boolean, retractLen: number, retractSpeed: number,
+  coolingOn: boolean, fanSpeed: number,
 ): string {
   const side = 20
   const cx = 50 + ox, cy = 50 + oy
@@ -78,11 +87,13 @@ function tempTestGCode(
   const layersPerSection = Math.max(1, Math.round(5 / h))
   const temps: number[] = []
   for (let t = tempMin; t <= tempMax; t += tempStep) temps.push(t)
+  const travelF = (travelSpeed * 60).toFixed(0)
+  const retractF = (retractSpeed * 60).toFixed(0)
 
   const lines: string[] = [
     '; ============================================================',
     '; HybridSlicer — Temperature Calibration Tower',
-    `; Nozzle: ${nozzle} mm  Layer: ${h} mm`,
+    `; Nozzle: ${nozzle} mm  Layer: ${h} mm  Filament: ${diam} mm`,
     `; Temps: ${temps.join(', ')} °C  (${layersPerSection} layers each = ${(layersPerSection * h).toFixed(1)} mm)`,
     `; Total height: ${(temps.length * layersPerSection * h).toFixed(1)} mm`,
     '; Inspect each section for stringing, surface quality, layer adhesion.',
@@ -101,29 +112,43 @@ function tempTestGCode(
     for (let s = 0; s < layersPerSection; s++) {
       layerNum++
       const z = layerNum * h
+      const layerSpeed = layerNum === 1 ? firstLayerSpeed : speed
+      const printF = (layerSpeed * 60).toFixed(0)
       const ePerSide = calcE(nozzle, h, side, diam, flowPct)
       let eCum = 0
 
       lines.push(`; Layer ${layerNum} z=${z.toFixed(3)}`)
       lines.push(`G0 Z${z.toFixed(3)} F3000`)
-      lines.push(`G0 X${corners[0][0].toFixed(1)} Y${corners[0][1].toFixed(1)} F5000`)
+      lines.push(`G0 X${corners[0][0].toFixed(1)} Y${corners[0][1].toFixed(1)} F${travelF}`)
       lines.push('G92 E0')
+
+      if (layerNum === 2 && coolingOn) {
+        lines.push(`M106 S${Math.round(fanSpeed * 255 / 100)} ; fan ${fanSpeed}%`)
+      }
+
       for (let c = 0; c < 4; c++) {
         const next = corners[(c + 1) % 4]
         eCum += ePerSide
-        lines.push(`G1 X${next[0].toFixed(1)} Y${next[1].toFixed(1)} E${eCum.toFixed(4)} F${(speed * 60).toFixed(0)}`)
+        lines.push(`G1 X${next[0].toFixed(1)} Y${next[1].toFixed(1)} E${eCum.toFixed(4)} F${printF}`)
       }
-      lines.push(`G1 E${Math.max(0, eCum - 2).toFixed(4)} F2700 ; retract`)
+      if (retractEnabled) {
+        lines.push(`G1 E${(eCum - retractLen).toFixed(4)} F${retractF} ; retract`)
+      }
     }
   })
 
-  lines.push('', 'M104 S0', 'M140 S0', 'G28 X0 Y0', 'M84', '; End of temperature test')
+  lines.push('')
+  if (coolingOn) lines.push('M107 ; fan off')
+  lines.push('M104 S0', 'M140 S0', 'G28 X0 Y0', 'M84', '; End of temperature test')
   return lines.join('\n')
 }
 
 function calibCubeGCode(
   nozzle: number, h: number, speed: number, diam: number, flowPct: number,
   extTemp: number, bedTemp: number, ox: number, oy: number,
+  travelSpeed: number, firstLayerSpeed: number,
+  retractEnabled: boolean, retractLen: number, retractSpeed: number,
+  coolingOn: boolean, fanSpeed: number,
 ): string {
   const side = 20
   const height = 20
@@ -134,11 +159,16 @@ function calibCubeGCode(
   ]
   const totalLayers = Math.round(height / h)
   const ePerSide = calcE(nozzle, h, side, diam, flowPct)
+  const travelF = (travelSpeed * 60).toFixed(0)
+  const retractF = (retractSpeed * 60).toFixed(0)
 
   const lines: string[] = [
     '; ============================================================',
     '; HybridSlicer — Calibration Cube (20×20×20 mm)',
     `; Nozzle: ${nozzle} mm  Layer: ${h} mm  Flow: ${flowPct}%`,
+    `; Filament: ${diam} mm  Speed: ${speed} mm/s  Travel: ${travelSpeed} mm/s`,
+    `; Ext: ${extTemp}°C  Bed: ${bedTemp}°C`,
+    `; Retraction: ${retractEnabled ? `${retractLen} mm @ ${retractSpeed} mm/s` : 'off'}`,
     `; ${totalLayers} layers, single perimeter`,
     '; Measure X, Y, Z dimensions with calipers.',
     '; Target: 20.00 mm on each axis.',
@@ -151,20 +181,32 @@ function calibCubeGCode(
 
   for (let layer = 1; layer <= totalLayers; layer++) {
     const z = layer * h
+    const layerSpeed = layer === 1 ? firstLayerSpeed : speed
+    const printF = (layerSpeed * 60).toFixed(0)
     let eCum = 0
     lines.push(`; Layer ${layer}`)
     lines.push(`G0 Z${z.toFixed(3)} F3000`)
-    lines.push(`G0 X${corners[0][0].toFixed(1)} Y${corners[0][1].toFixed(1)} F5000`)
+    lines.push(`G0 X${corners[0][0].toFixed(1)} Y${corners[0][1].toFixed(1)} F${travelF}`)
     lines.push('G92 E0')
+
+    // Enable fan after first layer
+    if (layer === 2 && coolingOn) {
+      lines.push(`M106 S${Math.round(fanSpeed * 255 / 100)} ; fan ${fanSpeed}%`)
+    }
+
     for (let c = 0; c < 4; c++) {
       const next = corners[(c + 1) % 4]
       eCum += ePerSide
-      lines.push(`G1 X${next[0].toFixed(1)} Y${next[1].toFixed(1)} E${eCum.toFixed(4)} F${(speed * 60).toFixed(0)}`)
+      lines.push(`G1 X${next[0].toFixed(1)} Y${next[1].toFixed(1)} E${eCum.toFixed(4)} F${printF}`)
     }
-    lines.push(`G1 E${Math.max(0, eCum - 2).toFixed(4)} F2700 ; retract`)
+    if (retractEnabled) {
+      lines.push(`G1 E${(eCum - retractLen).toFixed(4)} F${retractF} ; retract`)
+    }
   }
 
-  lines.push('', 'M104 S0', 'M140 S0', 'G28 X0 Y0', 'M84', '; End of calibration cube')
+  lines.push('')
+  if (coolingOn) lines.push('M107 ; fan off')
+  lines.push('M104 S0', 'M140 S0', 'G28 X0 Y0', 'M84', '; End of calibration cube')
   return lines.join('\n')
 }
 
@@ -224,10 +266,19 @@ function PrintCalibrationTab() {
     ? profile.nozzleDiameterMm : 0.4
   const h = profile?.layerHeightMm ?? 0.2
   const speed = profile?.printSpeedMmS ?? 50
-  const diam = profile?.pelletModeEnabled ? (profile.virtualFilamentDiameterMm ?? 1.0) : 1.75
+  const diam = profile?.pelletModeEnabled
+    ? (profile.virtualFilamentDiameterMm ?? 1.0)
+    : (profile?.filamentDiameterMm ?? 1.75)
   const flowPct = profile?.materialFlowPct ?? 100
   const extTemp = profile?.printTemperatureDegC ?? 210
   const bedTemp = profile?.bedTemperatureDegC ?? 60
+  const travelSpeed = profile?.travelSpeedMmS ?? 150
+  const firstLayerSpeed = profile?.firstLayerSpeedMmS ?? 20
+  const retractEnabled = profile?.retractionEnabled ?? true
+  const retractLen = profile?.retractLengthMm ?? 5
+  const retractSpeed = profile?.retractSpeedMmS ?? 45
+  const coolingOn = profile?.coolingEnabled ?? true
+  const fanSpeed = profile?.coolingFanSpeedPct ?? 100
 
   const ox = machine?.bedPositionXMm ?? 0
   const oy = machine?.bedPositionYMm ?? 0
@@ -286,6 +337,9 @@ function PrintCalibrationTab() {
           <span className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-300">Flow: {flowPct}%</span>
           <span className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-300">Ext: {extTemp}°C</span>
           <span className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-300">Bed: {bedTemp}°C</span>
+          <span className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-300">Filament: {diam} mm</span>
+          <span className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-300">Travel: {travelSpeed} mm/s</span>
+          <span className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-300">Retract: {retractEnabled ? `${retractLen} mm` : 'off'}</span>
           {ox !== 0 || oy !== 0 ? (
             <span className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-amber-400">Offset: +{ox}, +{oy}</span>
           ) : null}
@@ -300,12 +354,12 @@ function PrintCalibrationTab() {
           The line closest to your nozzle diameter ({nozzle} mm) is your ideal flow rate.
         </p>
         <div className="flex gap-2">
-          <button onClick={() => { const g = flowLinesGCode(nozzle, h, speed, diam, flowPct, extTemp, bedTemp, ox, oy); doPreview(g) }}
+          <button onClick={() => { const g = flowLinesGCode(nozzle, h, speed, diam, flowPct, extTemp, bedTemp, ox, oy, travelSpeed, retractEnabled, retractLen, retractSpeed); doPreview(g) }}
             disabled={!profile}
             className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition flex-1">
             Preview
           </button>
-          <button onClick={() => { const g = flowLinesGCode(nozzle, h, speed, diam, flowPct, extTemp, bedTemp, ox, oy); doDownload('flow_calibration.gcode', g) }}
+          <button onClick={() => { const g = flowLinesGCode(nozzle, h, speed, diam, flowPct, extTemp, bedTemp, ox, oy, travelSpeed, retractEnabled, retractLen, retractSpeed); doDownload('flow_calibration.gcode', g) }}
             disabled={!profile}
             className="px-4 py-2.5 bg-amber-700 hover:bg-amber-600 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition flex-1">
             Download G-code
@@ -336,12 +390,12 @@ function PrintCalibrationTab() {
           <span className="text-xs text-gray-500">°C</span>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => { const g = tempTestGCode(nozzle, h, speed, diam, flowPct, tempMin, tempMax, tempStep, bedTemp, ox, oy); doPreview(g) }}
+          <button onClick={() => { const g = tempTestGCode(nozzle, h, speed, diam, flowPct, tempMin, tempMax, tempStep, bedTemp, ox, oy, travelSpeed, firstLayerSpeed, retractEnabled, retractLen, retractSpeed, coolingOn, fanSpeed); doPreview(g) }}
             disabled={!profile}
             className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition flex-1">
             Preview
           </button>
-          <button onClick={() => { const g = tempTestGCode(nozzle, h, speed, diam, flowPct, tempMin, tempMax, tempStep, bedTemp, ox, oy); doDownload('temp_calibration.gcode', g) }}
+          <button onClick={() => { const g = tempTestGCode(nozzle, h, speed, diam, flowPct, tempMin, tempMax, tempStep, bedTemp, ox, oy, travelSpeed, firstLayerSpeed, retractEnabled, retractLen, retractSpeed, coolingOn, fanSpeed); doDownload('temp_calibration.gcode', g) }}
             disabled={!profile}
             className="px-4 py-2.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition flex-1">
             Download G-code
@@ -357,12 +411,12 @@ function PrintCalibrationTab() {
           Target: 20.00 mm. Deviation indicates steps/mm or flow issues.
         </p>
         <div className="flex gap-2">
-          <button onClick={() => { const g = calibCubeGCode(nozzle, h, speed, diam, flowPct, extTemp, bedTemp, ox, oy); doPreview(g) }}
+          <button onClick={() => { const g = calibCubeGCode(nozzle, h, speed, diam, flowPct, extTemp, bedTemp, ox, oy, travelSpeed, firstLayerSpeed, retractEnabled, retractLen, retractSpeed, coolingOn, fanSpeed); doPreview(g) }}
             disabled={!profile}
             className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition flex-1">
             Preview
           </button>
-          <button onClick={() => { const g = calibCubeGCode(nozzle, h, speed, diam, flowPct, extTemp, bedTemp, ox, oy); doDownload('calibration_cube.gcode', g) }}
+          <button onClick={() => { const g = calibCubeGCode(nozzle, h, speed, diam, flowPct, extTemp, bedTemp, ox, oy, travelSpeed, firstLayerSpeed, retractEnabled, retractLen, retractSpeed, coolingOn, fanSpeed); doDownload('calibration_cube.gcode', g) }}
             disabled={!profile}
             className="px-4 py-2.5 bg-green-700 hover:bg-green-600 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition flex-1">
             Download G-code

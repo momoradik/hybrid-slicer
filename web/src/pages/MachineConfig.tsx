@@ -46,6 +46,7 @@ interface MachineForm {
   cncOffsetZ: number
   cncOffsetRot: number
   safeClearanceHeightMm: number
+  gCodeFlavor: string
   extruderAxes: string
   cncAxes: string
   motionAssignmentEnabled: boolean
@@ -109,6 +110,7 @@ function machineToForm(m: MachineProfile): MachineForm {
     cncOffsetZ: m.cncOffset?.z ?? 0,
     cncOffsetRot: m.cncOffset?.rotationDeg ?? 0,
     safeClearanceHeightMm: m.safeClearanceHeightMm ?? 5,
+    gCodeFlavor: m.gCodeFlavor ?? 'RepRap (Marlin/Sprinter)',
     extruderAxes: m.extruderAxes ?? 'XYZ',
     cncAxes: m.cncAxes ?? 'XYZ',
     motionAssignmentEnabled: m.motionAssignmentEnabled ?? false,
@@ -157,6 +159,7 @@ function emptyForm(): MachineForm {
     cncOffsetZ: 0,
     cncOffsetRot: 0,
     safeClearanceHeightMm: 5,
+    gCodeFlavor: 'RepRap (Marlin/Sprinter)',
     extruderAxes: 'XYZ',
     cncAxes: 'XYZ',
     motionAssignmentEnabled: false,
@@ -306,6 +309,7 @@ function MachineConfigInner() {
       ipAddress: form.ipAddress || undefined, port: form.port,
       cncOffset: { x: form.cncOffsetX, y: form.cncOffsetY, z: form.cncOffsetZ, rotationDeg: form.cncOffsetRot },
       safeClearanceHeightMm: form.safeClearanceHeightMm,
+      gCodeFlavor: form.gCodeFlavor,
       extruderAxes: form.extruderAxes, cncAxes: form.cncAxes,
       motionAssignmentEnabled: form.motionAssignmentEnabled,
       motionAssignmentJson: JSON.stringify({
@@ -723,6 +727,22 @@ function MachineConfigInner() {
               </button>
               {showAdvanced && (
                 <div className="mt-3 space-y-3">
+                  <MField label="G-code Flavor">
+                    <select className="input w-full" value={form.gCodeFlavor}
+                      onChange={e => set('gCodeFlavor', e.target.value)}>
+                      <option value="RepRap (Marlin/Sprinter)">Marlin / Sprinter</option>
+                      <option value="RepRap (RepRap)">RepRap (Duet / RRF)</option>
+                      <option value="RepRap (Volumetric)">Marlin (Volumetric)</option>
+                      <option value="Griffin">Griffin</option>
+                      <option value="Repetier">Repetier</option>
+                      <option value="BFB">Bits from Bytes</option>
+                      <option value="MACH3">Mach3</option>
+                      <option value="Makerbot">Makerbot</option>
+                    </select>
+                    <p className="text-[10px] text-gray-600 mt-0.5">
+                      Controls the G-code dialect in sliced output. Select RepRap for Duet/RRF boards.
+                    </p>
+                  </MField>
                   <p className="text-xs text-gray-500">
                     Remap G-code axis letters per component. Default is XYZ. E.g. set CNC to UVW so CNC G-code uses U/V/W instead of X/Y/Z.
                   </p>

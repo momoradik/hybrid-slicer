@@ -84,6 +84,9 @@ public sealed record SlicingParameters(
     // Origin
     bool OriginIsBedCenter = true,
 
+    // G-code flavor — CuraEngine machine_gcode_flavor enum key
+    string GCodeFlavor = "RepRap (Marlin/Sprinter)",
+
     // Extrusion
     double MaterialFlowPct = 100.0,
 

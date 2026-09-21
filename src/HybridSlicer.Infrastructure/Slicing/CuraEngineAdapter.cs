@@ -156,6 +156,15 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         var lh      = layerHeight.ToString("F4", ic);
         var minWall = (lineWidth * 0.85).ToString("F4", ic);
 
+        // CuraEngine uses parent-child setting relationships where parent settings
+        // (wall_thickness, top_thickness, etc.) compute child settings via formulas.
+        // If we only set the child via -s, the parent's default can re-derive the child.
+        // Fix: compute and set BOTH parent and child to keep them consistent.
+        var wallThickness    = lineWidth + Math.Max(0, p.WallCount - 1) * lineWidth;
+        var topThickness     = p.TopLayers * layerHeight;
+        var bottomThickness  = p.BottomLayers * layerHeight;
+        var topBottomThickness = Math.Max(topThickness, bottomThickness);
+
         var sb = new StringBuilder("slice -v -p");
 
         // ── Base machine definition ──────────────────────────────────────────
@@ -169,6 +178,8 @@ public sealed class CuraEngineAdapter : ISlicingEngine
 
         // Explicit line-width variants — in CuraEngine 5.10.x these do NOT fall back
         // to the global line_width at the extruder level, so we set them everywhere.
+        // wall_line_width is the parent of wall_line_width_0 and wall_line_width_x.
+        sb.Append($" -s wall_line_width={lw}");
         sb.Append($" -s wall_line_width_0={lw}");
         sb.Append($" -s wall_line_width_x={lw}");
         sb.Append($" -s skin_line_width={lw}");
@@ -179,17 +190,34 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         sb.Append($" -s min_even_wall_line_width={minWall}");
         sb.Append($" -s min_odd_wall_line_width={minWall}");
 
+        // Structure: set both parent thickness AND child count/layers to prevent
+        // CuraEngine's formulas from recomputing children from stale parent defaults.
+        sb.Append($" -s wall_thickness={wallThickness.ToString("F4", ic)}");
         sb.Append($" -s wall_line_count={p.WallCount}");
+        sb.Append($" -s top_bottom_thickness={topBottomThickness.ToString("F4", ic)}");
+        sb.Append($" -s top_thickness={topThickness.ToString("F4", ic)}");
+        sb.Append($" -s bottom_thickness={bottomThickness.ToString("F4", ic)}");
         sb.Append($" -s top_layers={p.TopLayers}");
         sb.Append($" -s bottom_layers={p.BottomLayers}");
+
+        // Speeds: set parent speed_wall so its children (speed_wall_0, speed_wall_x)
+        // don't get recomputed from the formula "speed_print / 2".
         sb.Append($" -s speed_print={p.PrintSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_travel={p.TravelSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_infill={p.InfillSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_wall={p.WallSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_wall_0={p.WallSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_wall_x={p.InnerWallSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_layer_0={p.FirstLayerSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_topbottom={p.TopBottomSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_travel_layer_0={p.FirstLayerTravelSpeedMmS.ToString("F1", ic)}");
+        // Child speeds that CuraEngine computes from parents — set explicitly to prevent
+        // formula-derived values from overriding when only the parent is changed.
+        sb.Append($" -s speed_print_layer_0={p.FirstLayerSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_roofing={p.TopBottomSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s skirt_brim_speed={p.FirstLayerSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_support={p.PrintSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_support_infill={p.PrintSpeedMmS.ToString("F1", ic)}");
 
         // Cooling: minimum layer time and minimum speed
         sb.Append($" -s cool_min_layer_time={p.MinLayerTimeSec.ToString("F1", ic)}");
@@ -221,6 +249,8 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         sb.Append($" -s retraction_enable={p.RetractionEnabled.ToString().ToLowerInvariant()}");
         sb.Append($" -s retraction_amount={p.RetractLengthMm.ToString("F2", ic)}");
         sb.Append($" -s retraction_speed={p.RetractSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s retraction_retract_speed={p.RetractSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s retraction_prime_speed={p.RetractSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s retraction_min_travel={p.RetractMinTravelMm.ToString("F2", ic)}");
         sb.Append($" -s support_enable={p.SupportEnabled.ToString().ToLowerInvariant()}");
         if (p.SupportEnabled)
@@ -231,13 +261,30 @@ public sealed class CuraEngineAdapter : ISlicingEngine
             sb.Append($" -s support_infill_rate={p.SupportInfillDensityPct.ToString("F1", ic)}");
             if (!string.IsNullOrWhiteSpace(p.SupportInfillPattern))
                 sb.Append($" -s support_pattern={p.SupportInfillPattern}");
+            // Explicitly set support_line_distance — CuraEngine computes this from
+            // support_infill_rate and support_pattern; pre-computing prevents stale formula values.
+            var supportPattern = string.IsNullOrWhiteSpace(p.SupportInfillPattern) ? "grid" : p.SupportInfillPattern;
+            var patternFactor = supportPattern == "grid" ? 2.0
+                              : supportPattern is "triangles" or "trihexagon" or "cubic" ? 3.0
+                              : 1.0;
+            var supportLineDist = p.SupportInfillDensityPct > 0
+                ? (lineWidth * 100.0) / p.SupportInfillDensityPct * patternFactor
+                : 99999.0;
+            sb.Append($" -s support_line_distance={supportLineDist.ToString("F4", ic)}");
         }
         sb.Append($" -s cool_fan_enabled={p.CoolingEnabled.ToString().ToLowerInvariant()}");
         sb.Append($" -s cool_fan_speed={p.CoolingFanSpeedPct.ToString("F1", ic)}");
+        // Fan speed children — CuraEngine uses min/max internally, not cool_fan_speed directly
+        sb.Append($" -s cool_fan_speed_min={p.CoolingFanSpeedPct.ToString("F1", ic)}");
+        sb.Append($" -s cool_fan_speed_max={p.CoolingFanSpeedPct.ToString("F1", ic)}");
         sb.Append($" -s machine_width={p.BedWidthMm.ToString("F1", ic)}");
         sb.Append($" -s machine_depth={p.BedDepthMm.ToString("F1", ic)}");
         sb.Append($" -s machine_height={p.BedHeightMm.ToString("F1", ic)}");
         sb.Append($" -s machine_nozzle_size={p.NozzleDiameterMm.ToString("F2", ic)}");
+        // G-code flavor: determines the dialect (Marlin, RepRap, etc.)
+        // Value must be quoted — it contains spaces and parentheses.
+        var flavor = string.IsNullOrWhiteSpace(p.GCodeFlavor) ? "RepRap (Marlin/Sprinter)" : p.GCodeFlavor;
+        sb.Append($" -s \"machine_gcode_flavor={flavor}\"");
         // Origin mode: must match the STL viewer and G-code preview coordinate system.
         sb.Append($" -s machine_center_is_zero={p.OriginIsBedCenter.ToString().ToLowerInvariant()}");
         var adhesion = string.IsNullOrWhiteSpace(p.AdhesionType) ? "none" : p.AdhesionType;
@@ -256,6 +303,7 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         sb.Append($" -s layer_height={lh}");
         sb.Append($" -s layer_height_0={lh}");
         sb.Append($" -s line_width={lw}");
+        sb.Append($" -s wall_line_width={lw}");
         sb.Append($" -s wall_line_width_0={lw}");
         sb.Append($" -s wall_line_width_x={lw}");
         sb.Append($" -s skin_line_width={lw}");
@@ -266,19 +314,30 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         sb.Append($" -s min_even_wall_line_width={minWall}");
         sb.Append($" -s min_odd_wall_line_width={minWall}");
 
+        // Structure — repeat parent+child in extruder context
+        sb.Append($" -s wall_thickness={wallThickness.ToString("F4", ic)}");
         sb.Append($" -s wall_line_count={p.WallCount}");
+        sb.Append($" -s top_bottom_thickness={topBottomThickness.ToString("F4", ic)}");
+        sb.Append($" -s top_thickness={topThickness.ToString("F4", ic)}");
+        sb.Append($" -s bottom_thickness={bottomThickness.ToString("F4", ic)}");
         sb.Append($" -s top_layers={p.TopLayers}");
         sb.Append($" -s bottom_layers={p.BottomLayers}");
 
-        // Speeds — CuraEngine 5.x resolves these from extruder context
+        // Speeds — repeat parent+child in extruder context
         sb.Append($" -s speed_print={p.PrintSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_travel={p.TravelSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_infill={p.InfillSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_wall={p.WallSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_wall_0={p.WallSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_wall_x={p.InnerWallSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_layer_0={p.FirstLayerSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_topbottom={p.TopBottomSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s speed_travel_layer_0={p.FirstLayerTravelSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_print_layer_0={p.FirstLayerSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_roofing={p.TopBottomSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s skirt_brim_speed={p.FirstLayerSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_support={p.PrintSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s speed_support_infill={p.PrintSpeedMmS.ToString("F1", ic)}");
 
         // Cooling
         sb.Append($" -s cool_min_layer_time={p.MinLayerTimeSec.ToString("F1", ic)}");
@@ -323,9 +382,11 @@ public sealed class CuraEngineAdapter : ISlicingEngine
             sb.Append($" -s material_standby_temperature={p.StandbyTemperatureDegC.ToString("F1", ic)}");
         }
 
-        // Retraction
+        // Retraction — repeat parent+child speeds in extruder context
         sb.Append($" -s retraction_amount={p.RetractLengthMm.ToString("F2", ic)}");
         sb.Append($" -s retraction_speed={p.RetractSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s retraction_retract_speed={p.RetractSpeedMmS.ToString("F1", ic)}");
+        sb.Append($" -s retraction_prime_speed={p.RetractSpeedMmS.ToString("F1", ic)}");
         sb.Append($" -s retraction_min_travel={p.RetractMinTravelMm.ToString("F2", ic)}");
 
         // Support — repeat in extruder context
@@ -338,11 +399,22 @@ public sealed class CuraEngineAdapter : ISlicingEngine
             sb.Append($" -s support_infill_rate={p.SupportInfillDensityPct.ToString("F1", ic)}");
             if (!string.IsNullOrWhiteSpace(p.SupportInfillPattern))
                 sb.Append($" -s support_pattern={p.SupportInfillPattern}");
+            // Repeat support_line_distance in extruder context
+            var extSupportPattern = string.IsNullOrWhiteSpace(p.SupportInfillPattern) ? "grid" : p.SupportInfillPattern;
+            var extPatternFactor = extSupportPattern == "grid" ? 2.0
+                                 : extSupportPattern is "triangles" or "trihexagon" or "cubic" ? 3.0
+                                 : 1.0;
+            var extSupportLineDist = p.SupportInfillDensityPct > 0
+                ? (lineWidth * 100.0) / p.SupportInfillDensityPct * extPatternFactor
+                : 99999.0;
+            sb.Append($" -s support_line_distance={extSupportLineDist.ToString("F4", ic)}");
         }
 
         // Cooling
         sb.Append($" -s cool_fan_enabled={p.CoolingEnabled.ToString().ToLowerInvariant()}");
         sb.Append($" -s cool_fan_speed={p.CoolingFanSpeedPct.ToString("F1", ic)}");
+        sb.Append($" -s cool_fan_speed_min={p.CoolingFanSpeedPct.ToString("F1", ic)}");
+        sb.Append($" -s cool_fan_speed_max={p.CoolingFanSpeedPct.ToString("F1", ic)}");
 
         // Settings with no default in fdmextruder.def.json — cause crashes if missing.
         sb.Append(" -s roofing_layer_count=0");

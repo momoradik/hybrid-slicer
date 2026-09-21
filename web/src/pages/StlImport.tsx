@@ -77,6 +77,64 @@ async function buildTransformedStlBlob(file: File, transform: ModelTransform): P
   return new File([dv.buffer as ArrayBuffer], file.name, { type: 'application/octet-stream' })
 }
 
+async function buildMergedStlBlob(models: { file: File; transform: ModelTransform }[]): Promise<File> {
+  if (models.length === 1) return buildTransformedStlBlob(models[0].file, models[0].transform)
+
+  const loader   = new STLLoader()
+  const exporter = new STLExporter()
+
+  // Transform each model and collect all geometries
+  const mergedGeo = new THREE.BufferGeometry()
+  const allPositions: number[] = []
+
+  for (const { file, transform } of models) {
+    const geo = loader.parse(await file.arrayBuffer())
+    geo.center()
+    geo.computeBoundingBox()
+    const size = new THREE.Vector3()
+    geo.boundingBox!.getSize(size)
+    geo.translate(0, size.y / 2, 0)
+
+    const mesh  = new THREE.Mesh(geo)
+    const group = new THREE.Group()
+    group.add(mesh)
+    group.position.set(transform.x, transform.z, transform.y)
+    group.rotation.set(
+      THREE.MathUtils.degToRad(transform.rotX),
+      THREE.MathUtils.degToRad(transform.rotZ),
+      THREE.MathUtils.degToRad(transform.rotY),
+      'XYZ',
+    )
+    group.scale.set(transform.scaleX, transform.scaleZ, transform.scaleY)
+    group.updateMatrixWorld(true)
+
+    const baked = geo.clone()
+    baked.applyMatrix4(mesh.matrixWorld)
+
+    // Y-up → Z-up swap + winding fix (same as buildTransformedStlBlob)
+    const pos = baked.attributes.position as THREE.BufferAttribute
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i)
+      pos.setXYZ(i, x, z, y)
+    }
+    for (let i = 0; i < pos.count; i += 3) {
+      const ax = pos.getX(i+1), ay = pos.getY(i+1), az = pos.getZ(i+1)
+      const bx = pos.getX(i+2), by = pos.getY(i+2), bz = pos.getZ(i+2)
+      pos.setXYZ(i+1, bx, by, bz)
+      pos.setXYZ(i+2, ax, ay, az)
+    }
+
+    const arr = Array.from(pos.array as Float32Array)
+    allPositions.push(...arr)
+  }
+
+  mergedGeo.setAttribute('position', new THREE.Float32BufferAttribute(allPositions, 3))
+  mergedGeo.computeVertexNormals()
+
+  const dv = exporter.parse(new THREE.Mesh(mergedGeo), { binary: true }) as DataView
+  return new File([dv.buffer as ArrayBuffer], models[0].file.name, { type: 'application/octet-stream' })
+}
+
 // ── Per-model state ───────────────────────────────────────────────────────────
 
 interface ModelState extends ModelEntry {
@@ -481,10 +539,9 @@ export default function StlImport() {
         for (let bi = 0; bi < selectedMachineBeds.length; bi++) {
           const bedModels = models.filter(m => (m.bedIndex ?? 0) === bi)
           if (bedModels.length === 0) continue
-          const primary = bedModels[0]
           const fd = new FormData()
-          const transformedFile = await buildTransformedStlBlob(primary.file, primary.transform)
-          fd.append('file', transformedFile, primary.file.name)
+          const transformedFile = await buildMergedStlBlob(bedModels.map(m => ({ file: m.file, transform: m.transform })))
+          fd.append('file', transformedFile, bedModels[0].file.name)
           fd.append('jobName', `${jobName}_bed${bi + 1}`)
           fd.append('machineProfileId', machineId)
           fd.append('printProfileId', profileId)
@@ -543,13 +600,13 @@ export default function StlImport() {
         setIsMergingBeds(false)
       }
     } else {
-      // Single bed: existing flow
-      const primary = selectedModel ?? models[0]
-      if (!primary) return
+      // Single bed: merge all models on bed 0 into one STL
+      const bedModels = models.filter(m => (m.bedIndex ?? 0) === 0)
+      if (bedModels.length === 0) return
       try {
         const fd = new FormData()
-        const transformedFile = await buildTransformedStlBlob(primary.file, primary.transform)
-        fd.append('file', transformedFile, primary.file.name)
+        const transformedFile = await buildMergedStlBlob(bedModels.map(m => ({ file: m.file, transform: m.transform })))
+        fd.append('file', transformedFile, bedModels[0].file.name)
         fd.append('jobName', jobName)
         fd.append('machineProfileId', machineId)
         fd.append('printProfileId', profileId)
@@ -614,8 +671,7 @@ export default function StlImport() {
 
   const handlePreview = async () => {
     const bedModels = models.filter(m => (m.bedIndex ?? 0) === activeBedIndex)
-    const primary = bedModels.find(m => m.id === selectedId) ?? bedModels[0]
-    if (!primary || !machineId || !profileId || !materialId) return
+    if (bedModels.length === 0 || !machineId || !profileId || !materialId) return
     setIsPreviewLoading(true)
     setPreviewError(null)
     setBedPreviews(prev => { const n = { ...prev }; delete n[activeBedIndex]; return n })
@@ -623,9 +679,9 @@ export default function StlImport() {
     let previewJobId: string | null = null
     try {
       const fd = new FormData()
-      const transformedFile = await buildTransformedStlBlob(primary.file, primary.transform)
-      fd.append('file', transformedFile, primary.file.name)
-      fd.append('jobName', `${jobName || primary.name}_preview`)
+      const transformedFile = await buildMergedStlBlob(bedModels.map(m => ({ file: m.file, transform: m.transform })))
+      fd.append('file', transformedFile, bedModels[0].file.name)
+      fd.append('jobName', `${jobName || bedModels[0].name}_preview`)
       fd.append('machineProfileId', machineId)
       fd.append('printProfileId', profileId)
       fd.append('materialId', materialId)
@@ -640,8 +696,8 @@ export default function StlImport() {
       fd.append('gcodeHoming', gcodeHoming.toString())
       fd.append('gcodeLevelling', gcodeLevelling.toString())
       fd.append('applyCustomGCodeBlocks', applyCustomGCodeBlocks.toString())
-      if (primary.bedIndex != null && selectedMachineBeds.length > 1)
-        fd.append('bedIndex', primary.bedIndex.toString())
+      if (bedModels[0].bedIndex != null && selectedMachineBeds.length > 1)
+        fd.append('bedIndex', bedModels[0].bedIndex.toString())
       const { jobId } = await jobsApi.uploadStl(fd)
       previewJobId = jobId
       await jobsApi.slice(jobId)

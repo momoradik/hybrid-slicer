@@ -44,6 +44,7 @@ export interface MachineProfile {
   port: number
   cncOffset: MachineOffset
   safeClearanceHeightMm: number
+  gCodeFlavor: string
   extruderAxes: string
   cncAxes: string
   motionAssignmentEnabled: boolean
@@ -121,6 +122,8 @@ export interface PrintProfile {
   jerkControlEnabled: boolean         // jerk_enabled
   // Surface quality
   skinMonotonic: boolean             // skin_monotonic
+  // Filament
+  filamentDiameterMm: number        // material_diameter
   // Support
   supportEnabled: boolean
   pelletModeEnabled: boolean

@@ -80,6 +80,11 @@ public class MachineProfile
     // Rapid travel clearance height above part for CNC moves
     public double SafeClearanceHeightMm { get; private set; } = 5.0;
 
+    // G-code flavor for CuraEngine: determines the G-code dialect.
+    // Must match a CuraEngine machine_gcode_flavor enum key.
+    // Common values: "RepRap (Marlin/Sprinter)", "RepRap (RepRap)", "RepRap (Volumetric)"
+    public string GCodeFlavor { get; private set; } = "RepRap (Marlin/Sprinter)";
+
     // Axis naming: allows remapping G-code axis letters per component.
     // Default is "XYZ" for everything. E.g. CNC could be "UVW".
     // Stored as 3-char strings. Only the letter changes in G-code output.
@@ -93,6 +98,12 @@ public class MachineProfile
     // JSON: {"extruder":"YZ","bed1":"X","cnc":"YZ","bed1Cnc":"X"} etc.
     // Each value is a string of axis letters that component moves on.
     public string MotionAssignmentJson { get; private set; } = "{}";
+
+    public void SetGCodeFlavor(string flavor)
+    {
+        GCodeFlavor = string.IsNullOrWhiteSpace(flavor) ? "RepRap (Marlin/Sprinter)" : flavor.Trim();
+        Touch();
+    }
 
     public void SetExtruderAxes(string axes)
     {

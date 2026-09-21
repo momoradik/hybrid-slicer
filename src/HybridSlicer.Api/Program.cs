@@ -117,6 +117,8 @@ try
                 "ALTER TABLE CustomGCodeBlocks ADD COLUMN RepeatEveryNLayers INTEGER NOT NULL DEFAULT 0",
                 "ALTER TABLE CustomGCodeBlocks ADD COLUMN StartLayer INTEGER NOT NULL DEFAULT 1",
                 "ALTER TABLE CustomGCodeBlocks ADD COLUMN EndLayer INTEGER NULL",
+                // MachineProfile: G-code flavor for CuraEngine
+                "ALTER TABLE MachineProfiles ADD COLUMN GCodeFlavor TEXT NOT NULL DEFAULT 'RepRap (Marlin/Sprinter)'",
             ];
             foreach (var sql in alters)
                 try { await db.Database.ExecuteSqlRawAsync(sql); } catch { /* column already exists */ }
