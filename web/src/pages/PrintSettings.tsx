@@ -190,6 +190,10 @@ export default function PrintSettings() {
                   className="px-2 py-0.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded">
                   Edit
                 </button>
+                <button onClick={() => { const { id, ...rest } = p; setDraft({ ...EMPTY, ...rest, name: `${p.name} (copy)` }); setAdvanced(false) }}
+                  className="px-2 py-0.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded">
+                  Duplicate
+                </button>
                 <button onClick={() => deleteMutation.mutate(p.id)}
                   className="px-2 py-0.5 text-xs bg-red-900/40 hover:bg-red-900/60 text-red-400 rounded">
                   ✕

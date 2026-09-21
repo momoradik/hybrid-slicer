@@ -33,6 +33,7 @@ public sealed class LauncherForm : Form
         _healthTimer.Tick += (_, _) => PollServerStatus();
 
         _updater = new GitHubUpdateChecker();
+        _updater.ServerProcess = server;
         _updater.UpdateAvailable += OnUpdateAvailable;
         _updater.DownloadProgress += OnDownloadProgress;
         _updater.UpdateReady += OnUpdateReady;

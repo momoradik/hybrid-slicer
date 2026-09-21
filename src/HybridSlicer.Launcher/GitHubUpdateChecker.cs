@@ -295,6 +295,13 @@ public sealed class GitHubUpdateChecker : IDisposable
         }
     }
 
+    /// <summary>
+    /// Set by the launcher so we can kill the server process before the installer
+    /// tries to overwrite DLLs. Environment.Exit(0) does NOT fire FormClosed,
+    /// so the server would stay running and lock the files.
+    /// </summary>
+    public Process? ServerProcess { get; set; }
+
     public void InstallUpdate()
     {
         if (_pendingInstallerPath is null || !File.Exists(_pendingInstallerPath))
@@ -306,6 +313,17 @@ public sealed class GitHubUpdateChecker : IDisposable
 
         try
         {
+            // Kill the API server FIRST so it releases file locks on the DLLs.
+            // Environment.Exit() does not fire FormClosed, so the server would
+            // otherwise stay running and block the installer from overwriting files.
+            if (ServerProcess is not null && !ServerProcess.HasExited)
+            {
+                Log("InstallUpdate: killing server process before install...");
+                try { ServerProcess.Kill(entireProcessTree: true); } catch { }
+                try { ServerProcess.WaitForExit(5000); } catch { }
+                Log("InstallUpdate: server stopped");
+            }
+
             Log($"InstallUpdate: launching {_pendingInstallerPath}");
 
             var proc = Process.Start(new ProcessStartInfo
