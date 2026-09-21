@@ -376,6 +376,15 @@ export default function StlImport() {
 
   // ── Copy / paste clipboard for models ────────────────────────────────────
   const clipboardRef = useRef<ModelState | null>(null)
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
+
+  // Keep refs to latest state so the keyboard handler never has stale closures
+  const modelsRef = useRef(models)
+  modelsRef.current = models
+  const selectedIdRef = useRef(selectedId)
+  selectedIdRef.current = selectedId
+  const activeBedRef = useRef(activeBedIndex)
+  activeBedRef.current = activeBedIndex
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
@@ -384,7 +393,7 @@ export default function StlImport() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedId) removeModel(selectedId)
+        if (selectedIdRef.current) removeModel(selectedIdRef.current)
         return
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
@@ -397,16 +406,18 @@ export default function StlImport() {
         return
       }
       // Ctrl+C — copy selected model
-      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-        const sel = models.find(m => m.id === selectedId)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        const sel = modelsRef.current.find(m => m.id === selectedIdRef.current)
         if (sel) {
           e.preventDefault()
-          clipboardRef.current = sel
+          clipboardRef.current = { ...sel, transform: { ...sel.transform } }
+          setCopyFeedback('Copied')
+          setTimeout(() => setCopyFeedback(null), 1500)
         }
         return
       }
       // Ctrl+V — paste copied model with small offset
-      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
         const src = clipboardRef.current
         if (src) {
           e.preventDefault()
@@ -418,10 +429,34 @@ export default function StlImport() {
             transform: { ...src.transform, x: src.transform.x + 15, y: src.transform.y + 15 },
             size: src.size ? { ...src.size } : null,
             isOutOfBounds: false,
-            bedIndex: activeBedIndex,
+            bedIndex: activeBedRef.current,
           }
           setModels(prev => [...prev, entry])
           setSelectedId(id)
+          setCopyFeedback('Pasted')
+          setTimeout(() => setCopyFeedback(null), 1500)
+        }
+        return
+      }
+      // Ctrl+D — duplicate selected model (alternative shortcut)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+        const sel = modelsRef.current.find(m => m.id === selectedIdRef.current)
+        if (sel) {
+          e.preventDefault()
+          const id = mkId()
+          const url = URL.createObjectURL(sel.file)
+          const entry: ModelState = {
+            id, file: sel.file, url,
+            name: sel.name,
+            transform: { ...sel.transform, x: sel.transform.x + 15, y: sel.transform.y + 15 },
+            size: sel.size ? { ...sel.size } : null,
+            isOutOfBounds: false,
+            bedIndex: activeBedRef.current,
+          }
+          setModels(prev => [...prev, entry])
+          setSelectedId(id)
+          setCopyFeedback('Duplicated')
+          setTimeout(() => setCopyFeedback(null), 1500)
         }
         return
       }
@@ -429,7 +464,7 @@ export default function StlImport() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, models, activeBedIndex])
+  }, [])
 
   // ── Model helpers ──────────────────────────────────────────────────────────
 
@@ -935,6 +970,12 @@ export default function StlImport() {
 
             {/* Overlay badges */}
             <div className="absolute top-3 left-3 flex flex-col gap-2 pointer-events-none select-none">
+              {/* Copy/paste feedback */}
+              {copyFeedback && (
+                <div className="bg-green-900/85 text-green-200 text-xs px-3 py-1.5 rounded-lg backdrop-blur-sm animate-pulse">
+                  {copyFeedback}
+                </div>
+              )}
               {/* Active bed indicator for multi-bed */}
               {selectedMachineBeds.length > 1 && (
                 <div className="bg-indigo-900/85 text-indigo-200 text-xs px-3 py-1.5 rounded-lg backdrop-blur-sm">
