@@ -246,6 +246,13 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         sb.Append($" -s material_bed_temperature_layer_0={p.BedTemperatureDegC}");
         sb.Append($" -s material_diameter={p.FilamentDiameterMm.ToString("F2", ic)}");
         sb.Append($" -s material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        // Flow children — CuraEngine does NOT propagate material_flow to per-feature flows
+        sb.Append($" -s wall_material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        sb.Append($" -s wall_0_material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        sb.Append($" -s wall_x_material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        sb.Append($" -s skin_material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        sb.Append($" -s infill_material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        sb.Append($" -s support_material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
         sb.Append($" -s retraction_enable={p.RetractionEnabled.ToString().ToLowerInvariant()}");
         sb.Append($" -s retraction_amount={p.RetractLengthMm.ToString("F2", ic)}");
         sb.Append($" -s retraction_speed={p.RetractSpeedMmS.ToString("F1", ic)}");
@@ -361,6 +368,12 @@ public sealed class CuraEngineAdapter : ISlicingEngine
         // Material
         sb.Append($" -s material_diameter={p.FilamentDiameterMm.ToString("F2", ic)}");
         sb.Append($" -s material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        sb.Append($" -s wall_material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        sb.Append($" -s wall_0_material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        sb.Append($" -s wall_x_material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        sb.Append($" -s skin_material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        sb.Append($" -s infill_material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
+        sb.Append($" -s support_material_flow={p.MaterialFlowPct.ToString("F1", ic)}");
         sb.Append($" -s machine_nozzle_size={p.NozzleDiameterMm.ToString("F2", ic)}");
         sb.Append($" -s material_print_temperature={p.PrintTemperatureDegC}");
         sb.Append($" -s material_print_temperature_layer_0={p.PrintTemperatureDegC}");
