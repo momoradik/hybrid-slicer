@@ -4,7 +4,7 @@
 ; Self-contained: .NET runtime is bundled, no external install needed
 
 #define AppName    "HybridSlicer"
-#define AppVersion "1.5.6"
+#define AppVersion "1.5.7"
 #define AppExe     "HybridSlicer.exe"
 
 [Setup]
