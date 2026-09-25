@@ -79,6 +79,14 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
             if (!string.IsNullOrWhiteSpace(printFrag))
             {
                 output.AppendLine($"; --- Print layers {printStart + 1}–{layer} ---");
+                // Insert a rapid travel to the first print position so the nozzle
+                // doesn't extrude across the bed from the CNC park position.
+                if (i > 0) // after a CNC pass, nozzle is at CNC position
+                {
+                    var travel = ExtractFirstXY(printFrag);
+                    if (travel is not null)
+                        output.AppendLine(travel);
+                }
                 output.Append(printFrag);
                 output.AppendLine();
 
@@ -135,6 +143,13 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
             if (!string.IsNullOrWhiteSpace(lastFrag))
             {
                 output.AppendLine($"; --- Print layers {printStart + 1}–{lastLayer} ---");
+                // Travel to first print position after last CNC pass
+                if (sortedLayers.Count > 0)
+                {
+                    var travel = ExtractFirstXY(lastFrag);
+                    if (travel is not null)
+                        output.AppendLine(travel);
+                }
                 output.Append(lastFrag);
                 output.AppendLine();
 
@@ -235,6 +250,37 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
             }
         }
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Scans a G-code fragment for the first G0 or G1 move with X/Y coordinates
+    /// and returns a G0 rapid-travel command to that position. Used to insert
+    /// a safe travel move before each print batch so the nozzle doesn't extrude
+    /// across the bed from the CNC park position.
+    /// </summary>
+    private static string? ExtractFirstXY(string gcode)
+    {
+        foreach (var rawLine in gcode.Split('\n'))
+        {
+            var line = rawLine.Trim();
+            if (line.Length == 0 || line[0] == ';') continue;
+            var upper = line.ToUpperInvariant();
+            if (!(upper.StartsWith("G0 ") || upper.StartsWith("G1 ") ||
+                  upper.StartsWith("G00 ") || upper.StartsWith("G01 "))) continue;
+            var xm = System.Text.RegularExpressions.Regex.Match(upper, @"X([+-]?[\d.]+)");
+            var ym = System.Text.RegularExpressions.Regex.Match(upper, @"Y([+-]?[\d.]+)");
+            if (xm.Success || ym.Success)
+            {
+                var coords = "";
+                if (xm.Success) coords += $" X{xm.Groups[1].Value}";
+                if (ym.Success) coords += $" Y{ym.Groups[1].Value}";
+                // Also extract Z if present (first layer move often includes Z)
+                var zm = System.Text.RegularExpressions.Regex.Match(upper, @"Z([+-]?[\d.]+)");
+                if (zm.Success) coords += $" Z{zm.Groups[1].Value}";
+                return $"G0{coords} F6000 ; travel to print position";
+            }
+        }
+        return null;
     }
 
     /// <summary>

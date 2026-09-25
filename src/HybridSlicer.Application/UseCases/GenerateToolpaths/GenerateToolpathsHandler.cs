@@ -531,13 +531,17 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     layerData.OuterWallPaths.Count, layerData.InnerWallPaths.Count);
             }
 
-            // Postamble: return spindle to end position
+            // Postamble: lift 20mm above the last machined layer for safety, then stop spindle.
+            // Previous code moved to a fixed absolute Z (resolvedEndZ) which could be
+            // far from the part (e.g. Z190), causing a huge unnecessary move.
+            var lastMachinedLayerZ = layersToMachine.Any()
+                ? layersToMachine.Last() * profile.LayerHeightMm
+                : 0.0;
+            var postambleSafeZ = lastMachinedLayerZ + 20.0; // 20mm above printed height
             gcodeBuilder.AppendLine();
-            gcodeBuilder.AppendLine("; === Postamble: return spindle to end position ===");
-            gcodeBuilder.AppendLine($"G0 Z{machine.SafeClearanceHeightMm.ToString("F3", inv)}");
-            gcodeBuilder.AppendLine($"G0 X{resolvedEndX.ToString("F3", inv)} Y{resolvedEndY.ToString("F3", inv)}");
-            gcodeBuilder.AppendLine($"G0 Z{resolvedEndZ.ToString("F3", inv)}");
-            gcodeBuilder.AppendLine("M5 ; spindle stop — job complete");
+            gcodeBuilder.AppendLine("; === Postamble: lift above part and stop spindle ===");
+            gcodeBuilder.AppendLine($"G0 Z{postambleSafeZ.ToString("F3", inv)} ; 20mm above last machined layer");
+            gcodeBuilder.AppendLine("M5 ; spindle stop");
 
             // Write toolpath file
             var jobDir          = Path.GetDirectoryName(job.StlFilePath)!;
