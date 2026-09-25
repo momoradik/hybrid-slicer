@@ -55,7 +55,7 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
         // JobStart blocks
         AppendCustomBlocks(output, request.EnabledCustomBlocks, GCodeTrigger.JobStart, plan, ref stepIndex);
 
-        int printStart = 0; // last layer that has been flushed into output
+        int printStart = -1; // last layer that has been flushed into output (-1 = include layer 0)
 
         // Use the actual machined layers from the parsed toolpath (sorted ascending).
         // Filter out comment-only layers (skipped due to SpindleCollision, ToolTooWide, etc.)
@@ -125,20 +125,22 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
                 GCodeTrigger.AfterMachining, plan, ref stepIndex);
         }
 
-        // Flush any remaining print layers after the last machining event
-        if (printStart < request.TotalPrintLayers)
+        // Flush any remaining print layers after the last machining event.
+        // CuraEngine layers are 0-indexed: LAYER_COUNT=100 means layers 0–99.
+        var lastLayer = request.TotalPrintLayers - 1;
+        if (printStart < lastLayer)
         {
-            var lastFrag = ConcatLayers(segments, printStart + 1, request.TotalPrintLayers,
+            var lastFrag = ConcatLayers(segments, printStart + 1, lastLayer,
                 request.EnabledCustomBlocks);
             if (!string.IsNullOrWhiteSpace(lastFrag))
             {
-                output.AppendLine($"; --- Print layers {printStart + 1}–{request.TotalPrintLayers} ---");
+                output.AppendLine($"; --- Print layers {printStart + 1}–{lastLayer} ---");
                 output.Append(lastFrag);
                 output.AppendLine();
 
                 plan.AddStep(ProcessStep.CreatePrintStep(
                     plan.Id, stepIndex++,
-                    printStart + 1, request.TotalPrintLayers, lastFrag));
+                    printStart + 1, lastLayer, lastFrag));
             }
         }
 
@@ -169,13 +171,15 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
     /// <summary>
     /// Splits the raw print G-code into a dictionary keyed by layer index.
     /// Content for each layer includes the ;LAYER:N header line itself.
-    /// Layer 0 content (startup / first layer) is stored at key 0.
+    /// The preamble (everything before the first ;LAYER:N) is stored at key -1.
     /// </summary>
     private static Dictionary<int, string> SplitByLayer(string printGCode)
     {
         var result = new Dictionary<int, string>();
         var lines = printGCode.Split('\n');
-        var currentLayer = 0;
+        // Start at -1 so the preamble (before any ;LAYER: marker) is stored
+        // at key -1, keeping it separate from layer 0's actual content.
+        var currentLayer = -1;
         var current = new StringBuilder();
 
         foreach (var rawLine in lines)
