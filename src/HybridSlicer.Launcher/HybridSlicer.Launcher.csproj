@@ -9,7 +9,7 @@
     <RootNamespace>HybridSlicer.Launcher</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app-icon.ico</ApplicationIcon>
-    <Version>1.5.9</Version>
+    <Version>1.5.10</Version>
   </PropertyGroup>
 
   <ItemGroup>
