@@ -187,6 +187,8 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
     /// Splits the raw print G-code into a dictionary keyed by layer index.
     /// Content for each layer includes the ;LAYER:N header line itself.
     /// The preamble (everything before the first ;LAYER:N) is stored at key -1.
+    /// CuraEngine's end G-code (M84, G28, M104 S0, M140 S0) is stripped from the
+    /// last layer so it doesn't appear mid-file in hybrid G-code output.
     /// </summary>
     private static Dictionary<int, string> SplitByLayer(string printGCode)
     {
@@ -215,6 +217,29 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
         // Store the final layer
         if (current.Length > 0)
             result[currentLayer] = current.ToString();
+
+        // Strip CuraEngine's end G-code from the last layer segment.
+        // These commands (M84, G28, M104 S0, M140 S0) would otherwise appear
+        // mid-file before the final CNC pass in hybrid output.
+        if (result.Count > 0)
+        {
+            var lastKey = result.Keys.Where(k => k >= 0).DefaultIfEmpty(-1).Max();
+            if (lastKey >= 0 && result.TryGetValue(lastKey, out var lastContent))
+            {
+                var cleaned = new StringBuilder();
+                foreach (var rawLine in lastContent.Split('\n'))
+                {
+                    var t = rawLine.TrimStart().ToUpperInvariant();
+                    if (t.StartsWith("M84") || t.StartsWith("M104 S0") || t.StartsWith("M140 S0")
+                        || t.StartsWith("G28 X") || t.StartsWith("G28 Y")
+                        || t == "G28" || t.StartsWith(";END OF GCODE")
+                        || t.StartsWith("G92 E1") || t.StartsWith("G1 E-1"))
+                        continue; // strip end G-code commands
+                    cleaned.AppendLine(rawLine);
+                }
+                result[lastKey] = cleaned.ToString();
+            }
+        }
 
         return result;
     }
