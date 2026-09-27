@@ -46,7 +46,13 @@ public sealed record GenerateToolpathsCommand(
     /// <summary>Spindle end position Z (mm). Null = same as start Z.</summary>
     double? SpindleEndZ = null,
     /// <summary>Skip the first N part layers before starting machining.</summary>
-    int SkipMachiningLayers = 0) : IRequest<GenerateToolpathsResult>;
+    int SkipMachiningLayers = 0,
+    /// <summary>Extra depth (mm) below the band bottom to overlap into the previous band.
+    /// Compensates for rounded burr tips where the cutting diameter tapers near the tip.
+    /// 0 for flat end mills, ~1.0–1.5 for ball/rounded burrs.</summary>
+    double TipOverlapMm = 0.0,
+    /// <summary>Minimum Z above the bed (mm). The tool tip never goes below this.</summary>
+    double BedClearanceMm = 0.1) : IRequest<GenerateToolpathsResult>;
 
 public sealed record GenerateToolpathsResult(
     Guid                 JobId,

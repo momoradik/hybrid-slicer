@@ -49,6 +49,9 @@ public sealed record WallPathsRequest(
     /// When non-empty, they are buffered by <see cref="SupportClearanceMm"/> and
     /// subtracted from the milling area so the tool never enters support regions.
     /// </summary>
+    /// <summary>Top of the printed part at this machining event. When set, retract height
+    /// uses this instead of ZHeightMm so the tool retracts above the part top, not the tip.</summary>
+    double? PartTopZMm = null,
     IReadOnlyList<IReadOnlyList<(double X, double Y)>>? SupportPaths = null,
     /// <summary>XY clearance (mm) added around each support region as a forbidden zone.</summary>
     double SupportClearanceMm = 2.0);

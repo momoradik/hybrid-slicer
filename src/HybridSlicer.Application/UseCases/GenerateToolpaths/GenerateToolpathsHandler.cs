@@ -300,14 +300,24 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
 
         try
         {
+            // Track the top-of-part Z from the previous machining pass.
+            // The tool tip must go to the BOTTOM of the band (previousTopZ - tipOverlap),
+            // not the top, so the flutes machine the full band height.
+            double previousTopZ = 0.0;
+
             // Handler uses 1-based layer numbers; Cura uses 0-based
             foreach (var layer in layersToMachine)
             {
                 var curaLayerIdx = layer - 1;   // convert to Cura 0-based index
-                var zHeight      = layer * profile.LayerHeightMm;
-                // Apply Z safety offset: raise every machining pass by the configured amount.
-                // This adds a consistent safety distance in Z above the nominal layer surface.
-                var effectiveZ = zHeight + cmd.ZSafetyOffsetMm;
+                // Top of the printed part at this layer.
+                // Cura layer 0 prints at Z=layerHeight, so top = (curaIdx+1) * h = layer * h.
+                var partTopZ     = layer * profile.LayerHeightMm;
+                // Tool tip goes to the bottom of the band to machine the full interval.
+                // First pass: clamp to bedClearance so it machines from the bottom up.
+                var tipZ = Math.Max(previousTopZ - cmd.TipOverlapMm, cmd.BedClearanceMm);
+                var effectiveZ = tipZ + cmd.ZSafetyOffsetMm;
+                // zHeight is used for header comments and layer labelling
+                var zHeight = partTopZ;
 
                 _logger.LogDebug("Processing layer {Layer} (Cura ;LAYER:{CI}) Z={Z:F3} effectiveZ={EZ:F3}",
                     layer, curaLayerIdx, zHeight, effectiveZ);
@@ -408,6 +418,7 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     SafeClearanceHeightMm:  machine.SafeClearanceHeightMm,
                     IsOuterWall:            true,
                     ClimbMilling:           true,
+                    PartTopZMm:             partTopZ + cncOffset.Z,
                     SupportPaths:           supportPaths,
                     SupportClearanceMm:     cmd.SupportClearanceMm);
 
@@ -520,11 +531,12 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     _logger.LogWarning("Safety WARNING at layer {L}: {Issues}",
                         layer, string.Join("; ", validation.Issues));
 
-                gcodeBuilder.AppendLine($"; ── Layer {layer} (nominal Z={zHeight:F3} mm  effective Z={effectiveZ:F3} mm) [{layerData.OuterWallPaths.Count} outer wall segments] ─");
+                gcodeBuilder.AppendLine($"; ── Layer {layer} (top Z={partTopZ:F3} mm  tip Z={effectiveZ:F3} mm  band={partTopZ - tipZ:F2} mm) [{layerData.OuterWallPaths.Count} outer wall segments] ─");
                 gcodeBuilder.AppendLine(combinedGCode.TrimEnd());
                 gcodeBuilder.AppendLine();
 
                 machinedLayers.Add(layer);
+                previousTopZ = partTopZ; // next pass starts from here
                 _logger.LogInformation(
                     "Toolpath OK — layer {L} Z={Z:F3} [{Status}]  {OW} outer + {IW} inner segments",
                     layer, zHeight, validation.Status,

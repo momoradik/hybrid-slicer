@@ -71,7 +71,9 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
         var dz = request.MachineOffset.Z;
 
         var zCut  = request.ZHeightMm + dz;
-        var zSafe = request.SafeClearanceHeightMm + request.ZHeightMm + dz;
+        // Retract above the part top (not the tip position) so the tool clears the printed layers
+        var retractRef = request.PartTopZMm ?? request.ZHeightMm;
+        var zSafe = request.SafeClearanceHeightMm + retractRef + dz;
 
         // ── Build support forbidden zone (buffered union of all support paths) ──────
         // Each support segment is buffered by (tool_radius + clearance) so the tool
