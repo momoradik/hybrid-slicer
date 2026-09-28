@@ -1,0 +1,842 @@
+{
+  "cube_A": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 100 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 20 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 20 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config A"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=20, M5 count=21"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "cube_B": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 100 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 10 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 10 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config B"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=10, M5 count=11"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "cube_C": [
+    [
+      "F1",
+      "SKIP",
+      "No hybrid G-code"
+    ],
+    [
+      "F3",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F8",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F9-flute-msg",
+      "PASS",
+      "Error mentions flute length"
+    ],
+    [
+      "F9-recommend",
+      "PASS",
+      "Error includes recommendation"
+    ],
+    [
+      "F11",
+      "SKIP",
+      "No hybrid G-code"
+    ],
+    [
+      "F12",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F13",
+      "SKIP",
+      "No toolpath G-code"
+    ]
+  ],
+  "cube_D": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 100 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 3 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 3 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config D"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=3, M5 count=4"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "bowl_A": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 125 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 25 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 25 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config A"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=25, M5 count=26"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "bowl_B": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 125 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 12 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 12 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config B"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=12, M5 count=13"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "bowl_C": [
+    [
+      "F1",
+      "SKIP",
+      "No hybrid G-code"
+    ],
+    [
+      "F3",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F8",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F9-flute-msg",
+      "PASS",
+      "Error mentions flute length"
+    ],
+    [
+      "F9-recommend",
+      "PASS",
+      "Error includes recommendation"
+    ],
+    [
+      "F11",
+      "SKIP",
+      "No hybrid G-code"
+    ],
+    [
+      "F12",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F13",
+      "SKIP",
+      "No toolpath G-code"
+    ]
+  ],
+  "bowl_D": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 125 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 22 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 22 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config D"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=22, M5 count=23"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "cone_A": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 125 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 25 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 25 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config A"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=25, M5 count=26"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "cone_B": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 125 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 12 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 12 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config B"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=12, M5 count=13"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "cone_C": [
+    [
+      "F1",
+      "SKIP",
+      "No hybrid G-code"
+    ],
+    [
+      "F3",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F8",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F9-flute-msg",
+      "PASS",
+      "Error mentions flute length"
+    ],
+    [
+      "F9-recommend",
+      "PASS",
+      "Error includes recommendation"
+    ],
+    [
+      "F11",
+      "SKIP",
+      "No hybrid G-code"
+    ],
+    [
+      "F12",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F13",
+      "SKIP",
+      "No toolpath G-code"
+    ]
+  ],
+  "cone_D": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 125 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 4 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 4 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config D"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=4, M5 count=5"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "stepped_A": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 100 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 20 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 20 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config A"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=20, M5 count=21"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "stepped_B": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 100 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 10 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 10 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config B"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=10, M5 count=11"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "stepped_C": [
+    [
+      "F1",
+      "SKIP",
+      "No hybrid G-code"
+    ],
+    [
+      "F3",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F8",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F9-flute-msg",
+      "PASS",
+      "Error mentions flute length"
+    ],
+    [
+      "F9-recommend",
+      "PASS",
+      "Error includes recommendation"
+    ],
+    [
+      "F11",
+      "SKIP",
+      "No hybrid G-code"
+    ],
+    [
+      "F12",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F13",
+      "SKIP",
+      "No toolpath G-code"
+    ]
+  ],
+  "stepped_D": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 100 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 3 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 3 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config D"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=3, M5 count=4"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "slot_corner_A": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 75 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 15 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 15 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config A"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=30, M5 count=31"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "slot_corner_B": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 75 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 7 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 7 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config B"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=14, M5 count=15"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ],
+  "slot_corner_C": [
+    [
+      "F1",
+      "SKIP",
+      "No hybrid G-code"
+    ],
+    [
+      "F3",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F8",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F9-flute-msg",
+      "PASS",
+      "Error mentions flute length"
+    ],
+    [
+      "F9-recommend",
+      "PASS",
+      "Error includes recommendation"
+    ],
+    [
+      "F11",
+      "SKIP",
+      "No hybrid G-code"
+    ],
+    [
+      "F12",
+      "SKIP",
+      "No toolpath G-code"
+    ],
+    [
+      "F13",
+      "SKIP",
+      "No toolpath G-code"
+    ]
+  ],
+  "slot_corner_D": [
+    [
+      "F1-layer0",
+      "PASS",
+      "Layer 0 present"
+    ],
+    [
+      "F1-layers",
+      "PASS",
+      "All 75 layers present"
+    ],
+    [
+      "F3",
+      "PASS",
+      "All 2 passes have correct tip depth"
+    ],
+    [
+      "F8",
+      "PASS",
+      "All 2 passes within flute/spindle limits"
+    ],
+    [
+      "F9",
+      "SKIP",
+      "Not applicable for config D"
+    ],
+    [
+      "F11",
+      "PASS",
+      "No M84/G28 found (stripped correctly)"
+    ],
+    [
+      "F12",
+      "PASS",
+      "M3 count=4, M5 count=5"
+    ],
+    [
+      "F13",
+      "PASS",
+      "All CNC moves absolute, Z >= bed clearance"
+    ]
+  ]
+}

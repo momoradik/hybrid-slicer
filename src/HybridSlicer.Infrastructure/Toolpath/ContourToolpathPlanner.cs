@@ -71,9 +71,10 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
         var dz = request.MachineOffset.Z;
 
         var zCut  = request.ZHeightMm + dz;
-        // Retract above the part top (not the tip position) so the tool clears the printed layers
+        // Retract above the part top (not the tip position) so the tool clears the printed layers.
+        // SafeClearanceHeightMm is a RELATIVE clearance above the part top, not an absolute position.
         var retractRef = request.PartTopZMm ?? request.ZHeightMm;
-        var zSafe = request.SafeClearanceHeightMm + retractRef + dz;
+        var zSafe = retractRef + dz + request.SafeClearanceHeightMm;
 
         // ── Build support forbidden zone (buffered union of all support paths) ──────
         // Each support segment is buffered by (tool_radius + clearance) so the tool
@@ -516,15 +517,15 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
         var pts = climb ? coords : coords.Reverse().ToList();
 
         var sb = new StringBuilder();
-        sb.AppendLine($"; === Contour Milling Z={zCut:F3} ===");
+        sb.AppendLine($"; === Contour Milling Z={zCut:F3}  retract={zSafe:F3} ===");
         sb.AppendLine($"M3 S{rpm}");
-        sb.AppendLine($"G0 Z{zSafe:F3}");
-        sb.AppendLine($"G0 X{pts[0].X + dx:F3} Y{pts[0].Y + dy:F3}");
-        sb.AppendLine($"G1 Z{zCut:F3} F{feed * 0.3:F0}");
+        sb.AppendLine($"G0 Z{zSafe:F3} F6000 ; retract");
+        sb.AppendLine($"G0 X{pts[0].X + dx:F3} Y{pts[0].Y + dy:F3} F6000 ; travel to start");
+        sb.AppendLine($"G1 Z{zCut:F3} F{feed * 0.3:F0} ; plunge");
         sb.AppendLine($"G1 F{feed:F0}");
         foreach (var pt in pts.Skip(1))
             sb.AppendLine($"G1 X{pt.X + dx:F3} Y{pt.Y + dy:F3}");
-        sb.AppendLine($"G0 Z{zSafe:F3}");
+        sb.AppendLine($"G0 Z{zSafe:F3} F6000 ; retract");
         sb.AppendLine("M5");
         sb.AppendLine($"; === End Contour Z={zCut:F3} ===");
         return sb.ToString();

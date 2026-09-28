@@ -150,6 +150,10 @@ export interface CncTool {
   shankDiameterMm: number
   fluteCount: number
   toolMaterial: string
+  tipOverlapMm: number
+  tipShape: string
+  spindleRadiusMm: number
+  safetyMarginMm: number
   maxDepthOfCutMm: number
   recommendedRpm: number
   recommendedFeedMmPerMin: number

@@ -75,23 +75,76 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
 
         // ── Depth-of-cut validation ───────────────────────────────────────────
         var warnings = new List<string>();
-        var axialDepthMm = cmd.MachineEveryNLayers * profile.LayerHeightMm;
-        if (axialDepthMm > tool.MaxDepthOfCutMm)
+        var h = profile.LayerHeightMm;
+        var N = cmd.MachineEveryNLayers;
+        var bandMm = N * h;
+        var overlap = cmd.TipOverlapMm > 0 ? cmd.TipOverlapMm : tool.TipOverlapMm;
+        var margin = tool.SafetyMarginMm;
+        var engaged = bandMm + overlap;
+
+        if (bandMm > tool.MaxDepthOfCutMm && tool.MaxDepthOfCutMm > 0)
         {
-            var msg = $"Axial depth {axialDepthMm:F1} mm exceeds tool max depth of cut {tool.MaxDepthOfCutMm:F1} mm " +
-                $"({cmd.MachineEveryNLayers} layers × {profile.LayerHeightMm} mm). Risk of tool breakage or poor finish.";
+            var msg = $"Band {bandMm:F1} mm ({N} layers × {h} mm) exceeds tool max depth of cut {tool.MaxDepthOfCutMm:F1} mm. " +
+                "Risk of tool breakage or poor finish.";
             warnings.Add(msg);
             _logger.LogWarning(msg);
         }
 
-        // ── FluteTooShort global check ────────────────────────────────────────
-        // If the user's axial depth already exceeds the flute length, flag it immediately.
-        var globalFluteTooShort = tool.FluteLengthMm > 0
-            && axialDepthMm > tool.FluteLengthMm
-            && !cmd.AutoMachiningFrequency;
-        if (globalFluteTooShort)
-            warnings.Add($"Axial depth {axialDepthMm:F1} mm exceeds flute length {tool.FluteLengthMm:F1} mm. " +
-                "The shank will rub against the part. Consider using auto machining frequency or reducing the interval.");
+        // ── Manual frequency pre-validation ───────────────────────────────────
+        // Compute hard limits from tool geometry and block if exceeded.
+        if (!cmd.AutoMachiningFrequency)
+        {
+            var errors = new List<string>();
+
+            // Check 1: Flute length
+            var maxBandFlute = tool.FluteLengthMm > 0
+                ? tool.FluteLengthMm - overlap - margin : double.MaxValue;
+            var nFlute = tool.FluteLengthMm > 0 && h > 0
+                ? (int)Math.Floor(maxBandFlute / h) : int.MaxValue;
+            if (tool.FluteLengthMm > 0 && bandMm > maxBandFlute)
+            {
+                errors.Add(
+                    $"Flute length exceeded: band {bandMm:F1} mm + overlap {overlap:F1} mm + margin {margin:F1} mm " +
+                    $"= {engaged + margin:F1} mm engaged, but flute is only {tool.FluteLengthMm:F1} mm. " +
+                    $"The shank would rub against the part.\n" +
+                    $"  Max interval for this tool: every {Math.Max(1, nFlute)} layers ({maxBandFlute:F1} mm band).");
+            }
+
+            // Check 2: Spindle clearance
+            var maxBandSpindle = tool.ToolLengthMm > 0
+                ? tool.ToolLengthMm - overlap - margin : double.MaxValue;
+            var nSpindle = tool.ToolLengthMm > 0 && h > 0
+                ? (int)Math.Floor(maxBandSpindle / h) : int.MaxValue;
+            if (tool.ToolLengthMm > 0 && engaged + margin >= tool.ToolLengthMm)
+            {
+                errors.Add(
+                    $"Spindle collision risk: engaged depth {engaged + margin:F1} mm " +
+                    $"exceeds tip-to-spindle distance {tool.ToolLengthMm:F1} mm. " +
+                    $"The spindle body would hit the part.\n" +
+                    $"  Max interval for this tool: every {Math.Max(1, nSpindle)} layers ({maxBandSpindle:F1} mm band).");
+            }
+
+            if (errors.Count > 0)
+            {
+                var nAllowed = Math.Max(1, Math.Min(nFlute, nSpindle));
+                var autoPassEst = tool.FluteLengthMm > 0 && h > 0
+                    ? (int)Math.Ceiling(job.TotalPrintLayers!.Value * h / maxBandFlute)
+                    : job.TotalPrintLayers!.Value;
+                var fixedPassEst = job.TotalPrintLayers!.Value / nAllowed;
+
+                var recommendation =
+                    $"\nOptions:\n" +
+                    $"  1. Fixed interval: every {nAllowed} layer(s) ({nAllowed * h:F1} mm band) — " +
+                    $"about {fixedPassEst} machining passes.\n" +
+                    $"  2. AutoFreq: automatic interval based on tool limits — " +
+                    $"about {autoPassEst} passes, adapts to geometry. (Recommended)";
+
+                var fullMsg = $"Machining every {N} layers ({bandMm:F1} mm) is not achievable with {tool.Name}.\n\n" +
+                    string.Join("\n\n", errors) + "\n" + recommendation;
+
+                throw new DomainException("MACHINING_VALIDATION_FAILED", fullMsg);
+            }
+        }
 
         // ── Parse Cura G-code for wall paths ─────────────────────────────────
         _logger.LogInformation("Parsing Cura G-code: {Path}", job.PrintGCodePath);
@@ -102,6 +155,71 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
             "Parsed {Count} layers from Cura G-code. WALL-OUTER found in {OW} layers.",
             parsed.Layers.Count,
             parsed.Layers.Values.Count(l => l.OuterWallPaths.Count > 0));
+
+        // ── Contour-change validation (checks 3 & 4) ─────────────────────────
+        // Compare bounding boxes between the top and bottom of each band.
+        // If the contour shifts outward (overhang) or inward (step) by more than
+        // the tolerance, the band can't be machined with a single contour.
+        if (!cmd.AutoMachiningFrequency && N > 1)
+        {
+            var tol = 0.05; // mm — max gouge or uncut stock allowed
+            var contourWarnings = new List<string>();
+
+            for (var bandStart = 0; bandStart < job.TotalPrintLayers!.Value; bandStart += N)
+            {
+                var bandEnd = Math.Min(bandStart + N, job.TotalPrintLayers.Value) - 1;
+                // Get bounding box of bottom and top of band
+                if (!parsed.Layers.TryGetValue(bandStart, out var bottomLayer) ||
+                    !parsed.Layers.TryGetValue(bandEnd, out var topLayer))
+                    continue;
+                if (bottomLayer.OuterWallPaths.Count == 0 || topLayer.OuterWallPaths.Count == 0)
+                    continue;
+
+                // Compute bounding box for each
+                double bMinX = double.MaxValue, bMaxX = double.MinValue, bMinY = double.MaxValue, bMaxY = double.MinValue;
+                foreach (var path in bottomLayer.OuterWallPaths)
+                    foreach (var (px, py) in path) { if (px < bMinX) bMinX = px; if (px > bMaxX) bMaxX = px; if (py < bMinY) bMinY = py; if (py > bMaxY) bMaxY = py; }
+
+                double tMinX = double.MaxValue, tMaxX = double.MinValue, tMinY = double.MaxValue, tMaxY = double.MinValue;
+                foreach (var path in topLayer.OuterWallPaths)
+                    foreach (var (px, py) in path) { if (px < tMinX) tMinX = px; if (px > tMaxX) tMaxX = px; if (py < tMinY) tMinY = py; if (py > tMaxY) tMaxY = py; }
+
+                // Check 3: Outward expansion (overhang) — top is wider than bottom
+                var overhangX = Math.Max(tMaxX - bMaxX, bMinX - tMinX);
+                var overhangY = Math.Max(tMaxY - bMaxY, bMinY - tMinY);
+                var maxOverhang = Math.Max(overhangX, overhangY);
+                if (maxOverhang > tol)
+                {
+                    var zBot = (bandStart + 1) * h;
+                    var zTop = (bandEnd + 1) * h;
+                    contourWarnings.Add(
+                        $"Overhang: layers {bandStart}–{bandEnd} (Z {zBot:F1}–{zTop:F1} mm), " +
+                        $"upper layers extend {maxOverhang:F2} mm beyond lower layers. " +
+                        $"Machining the lower wall would gouge the overhang (allowed: {tol} mm).");
+                }
+
+                // Check 4: Inward contraction (step) — top is narrower, lower layers stick out
+                var inwardX = Math.Max(bMaxX - tMaxX, tMinX - bMinX);
+                var inwardY = Math.Max(bMaxY - tMaxY, tMinY - bMinY);
+                var maxInward = Math.Max(inwardX, inwardY);
+                if (maxInward > tol)
+                {
+                    var zBot = (bandStart + 1) * h;
+                    var zTop = (bandEnd + 1) * h;
+                    contourWarnings.Add(
+                        $"Inward step: layers {bandStart}–{bandEnd} (Z {zBot:F1}–{zTop:F1} mm), " +
+                        $"lower layers extend {maxInward:F2} mm beyond upper contour. " +
+                        $"A single contour pass would leave {maxInward:F2} mm uncut stock (allowed: {tol} mm).");
+                }
+            }
+
+            if (contourWarnings.Count > 0)
+            {
+                foreach (var w in contourWarnings) warnings.Add(w);
+                _logger.LogWarning("Contour-change warnings for manual interval {N}: {Count} issues found",
+                    N, contourWarnings.Count);
+            }
+        }
 
         // ── Mark job and prepare output ───────────────────────────────────────
         job.AssignCncTool(cmd.CncToolId);
@@ -115,7 +233,7 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
         var spindleRpm = cmd.SpindleRpmOverride ?? tool.RecommendedRpm;
         gcodeBuilder.AppendLine($"; Tool     : {tool.Name}  Ø{tool.DiameterMm} mm  Flute: {tool.FluteLengthMm} mm  Tool length: {tool.ToolLengthMm} mm  Feed: {tool.RecommendedFeedMmPerMin} mm/min  RPM: {spindleRpm}{(cmd.SpindleRpmOverride.HasValue ? $" (override — tool default: {tool.RecommendedRpm})" : "")}");
         gcodeBuilder.AppendLine($"; Nozzle   : Ø{profile.LineWidthMm} mm  Layer height: {profile.LayerHeightMm} mm");
-        gcodeBuilder.AppendLine($"; Interval : {(cmd.AutoMachiningFrequency ? "AUTO (flute-based)" : $"every {cmd.MachineEveryNLayers} part layer(s) (support-only layers excluded)")}  Axial depth: {axialDepthMm:F3} mm");
+        gcodeBuilder.AppendLine($"; Interval : {(cmd.AutoMachiningFrequency ? "AUTO (flute-based)" : $"every {cmd.MachineEveryNLayers} part layer(s) (support-only layers excluded)")}  Axial depth: {bandMm:F3} mm");
         gcodeBuilder.AppendLine($"; Options  : MachineInnerWalls={cmd.MachineInnerWalls}  AvoidSupports={cmd.AvoidSupports}  SupportClearance={cmd.SupportClearanceMm:F2} mm  AutoFreq={cmd.AutoMachiningFrequency}");
         gcodeBuilder.AppendLine(cmd.ZSafetyOffsetMm > 0
             ? $"; Z Offset  : +{cmd.ZSafetyOffsetMm:F3} mm — all machining passes raised by this amount above nominal layer height"
@@ -192,6 +310,23 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
             // Access is blocked when an upcoming layer protrudes further outward than this.
             var crcOffset       = tool.RadiusMm + profile.LineWidthMm / 2.0;
             // How many layers forward the look-ahead scans (1 flute length of height)
+            // Auto-frequency safety limits (all in mm, not layers, to support variable layer heights).
+            // The effective tip overlap comes from the tool definition (per-tool setting).
+            var tipOvl   = tool.TipOverlapMm;
+            var autoMargin = tool.SafetyMarginMm;
+            // Maximum band the tool can machine in one pass:
+            //   usable flute - tip_overlap - safety_margin
+            // Subtract one layer height as buffer so the trigger fires BEFORE the limit, not AT it.
+            // Without this, discrete layer steps can push engaged 0.1-0.2mm over the flute limit.
+            var maxBandMm = tool.FluteLengthMm > 0
+                ? Math.Max(h, tool.FluteLengthMm - tipOvl - autoMargin - h)
+                : double.MaxValue;
+            // Maximum engaged depth before spindle body hits the part:
+            //   tip-to-spindle distance - safety_margin
+            var maxEngaged = tool.ToolLengthMm > 0
+                ? Math.Max(profile.LayerHeightMm, tool.ToolLengthMm - autoMargin)
+                : double.MaxValue;
+
             var fluteLayerCount = tool.FluteLengthMm > 0 && profile.LayerHeightMm > 0
                 ? (int)Math.Ceiling(tool.FluteLengthMm / profile.LayerHeightMm)
                 : 0;
@@ -202,9 +337,9 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
 
             for (var layerIdx = 1; layerIdx <= job.TotalPrintLayers!.Value; layerIdx++)
             {
-                var currentZ   = layerIdx * profile.LayerHeightMm;
-                var effectiveZ = currentZ + cmd.ZSafetyOffsetMm;
-                var pending    = currentZ - lastMachinedZ;
+                var currentZ     = layerIdx * profile.LayerHeightMm;
+                var autoBand     = currentZ - lastMachinedZ;
+                var autoEngaged  = autoBand + tipOvl; // total depth the tool must reach
                 var curaIdx    = layerIdx - 1;
 
                 // Respect SkipMachiningLayers even in auto mode
@@ -213,8 +348,11 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                 if (hasWalls) autoPartCount++;
                 if (autoPartCount <= cmd.SkipMachiningLayers) continue;
 
-                // (1) Flute reach: accumulated uncut height ≥ 80% of flute length
-                var fluteTriggered = tool.FluteLengthMm > 0 && pending >= tool.FluteLengthMm * 0.8;
+                // (1) Flute reach: trigger when the NEXT layer would push engaged over flute limit.
+                // Check both the current engaged AND predict what the next layer's engaged would be.
+                var nextEngaged = (currentZ + h) - lastMachinedZ + tipOvl;
+                var fluteTriggered = tool.FluteLengthMm > 0
+                    && (nextEngaged + autoMargin >= tool.FluteLengthMm);
 
                 // (2) Look-ahead access blocking: scan upcoming layers within flute reach.
                 //     If any future layer extends outward beyond current + crcOffset, the
@@ -227,7 +365,6 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     {
                         if (!layerBounds.TryGetValue(curaIdx + la, out var futBnd) || futBnd.Area <= 0)
                             continue;
-                        // Outward expansion on any side exceeds CRC → access will be blocked
                         var outward = Math.Max(
                             Math.Max(futBnd.MaxX - curBnd.MaxX, curBnd.MinX - futBnd.MinX),
                             Math.Max(futBnd.MaxY - curBnd.MaxY, curBnd.MinY - futBnd.MinY));
@@ -235,29 +372,26 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     }
                 }
 
-                // (3) Spindle collision risk: spindle body within 5% of machine Z travel limit
-                var spindleTriggered = tool.ToolLengthMm > 0 &&
-                    effectiveZ + tool.ToolLengthMm > machine.BedHeightMm * 0.95;
+                // (3) Spindle clearance: engaged depth must stay below tip-to-spindle distance
+                //     so the spindle body never touches the part top
+                var spindleTriggered = tool.ToolLengthMm > 0 && autoEngaged >= maxEngaged;
 
-                // Only schedule machining on layers that actually have part geometry.
-                // Support-only / draft-shield-only layers have nothing to machine; scheduling
-                // on them would waste a machining event and confuse the process plan.
                 var hasPartGeometryAuto = layerBounds.TryGetValue(curaIdx, out var autoLayBnd) && autoLayBnd.Area > 0;
 
                 if ((fluteTriggered || accessBlocked || spindleTriggered)
-                    && pending >= profile.LayerHeightMm
-                    && hasPartGeometryAuto) // must be a real part layer, not support-only
+                    && autoBand >= profile.LayerHeightMm
+                    && hasPartGeometryAuto)
                 {
                     autoLayers.Add(layerIdx);
                     lastMachinedZ = currentZ;
                     _logger.LogDebug(
-                        "AUTO layer {L}: flute={FT} access={AT} spindle={ST}  pending={P:F2} mm  crcOffset={CRC:F3}",
-                        layerIdx, fluteTriggered, accessBlocked, spindleTriggered, pending, crcOffset);
+                        "AUTO layer {L}: flute={FT} access={AT} spindle={ST}  band={B:F2} engaged={E:F2} maxBand={MB:F2} maxEngaged={ME:F2}",
+                        layerIdx, fluteTriggered, accessBlocked, spindleTriggered, autoBand, autoEngaged, maxBandMm, maxEngaged);
                 }
             }
             layersToMachine = autoLayers;
-            gcodeBuilder.AppendLine($"; AUTO machining: flute={tool.FluteLengthMm} mm ({fluteLayerCount} layers)  look-ahead-access-blocking=CRC({crcOffset:F2}mm)  spindle-limit=95%");
-            gcodeBuilder.AppendLine($"; AUTO machining: {autoLayers.Count} layers selected (irregular — geometry-driven)");
+            gcodeBuilder.AppendLine($"; AUTO machining: flute={tool.FluteLengthMm} mm  tipOverlap={tipOvl:F1} mm  margin={autoMargin:F1} mm  maxBand={maxBandMm:F1} mm  maxEngaged={maxEngaged:F1} mm");
+            gcodeBuilder.AppendLine($"; AUTO machining: {autoLayers.Count} layers selected (geometry-driven)");
             gcodeBuilder.AppendLine();
             _logger.LogInformation(
                 "Auto machining frequency (geometry-aware look-ahead): {Count} layers selected from {Total}",
@@ -313,9 +447,12 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                 // Cura layer 0 prints at Z=layerHeight, so top = (curaIdx+1) * h = layer * h.
                 var partTopZ     = layer * profile.LayerHeightMm;
                 // Tool tip goes to the bottom of the band to machine the full interval.
-                // First pass: clamp to bedClearance so it machines from the bottom up.
-                var tipZ = Math.Max(previousTopZ - cmd.TipOverlapMm, cmd.BedClearanceMm);
+                // tipOverlap from tool definition (command override takes precedence if > 0).
+                var effectiveTipOverlap = cmd.TipOverlapMm > 0 ? cmd.TipOverlapMm : tool.TipOverlapMm;
+                var tipZ = Math.Max(previousTopZ - effectiveTipOverlap, cmd.BedClearanceMm);
                 var effectiveZ = tipZ + cmd.ZSafetyOffsetMm;
+                var layerBandMm = partTopZ - previousTopZ;
+                var engagedMm = partTopZ - tipZ;
                 // zHeight is used for header comments and layer labelling
                 var zHeight = partTopZ;
 
@@ -431,7 +568,7 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     allUnmachinableRegions.AddRange(toolpath.UnmachinableRegions);
 
                 // Check FluteTooShort for this layer: axial depth must not exceed flute length
-                if (tool.FluteLengthMm > 0 && axialDepthMm > tool.FluteLengthMm)
+                if (tool.FluteLengthMm > 0 && bandMm > tool.FluteLengthMm)
                 {
                     var env = new BoundingBox2D(0, 0, 0, 0);
                     allUnmachinableRegions.Add(new UnmachinableRegion(effectiveZ, "FluteTooShort", env));
@@ -531,7 +668,15 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     _logger.LogWarning("Safety WARNING at layer {L}: {Issues}",
                         layer, string.Join("; ", validation.Issues));
 
-                gcodeBuilder.AppendLine($"; ── Layer {layer} (top Z={partTopZ:F3} mm  tip Z={effectiveZ:F3} mm  band={partTopZ - tipZ:F2} mm) [{layerData.OuterWallPaths.Count} outer wall segments] ─");
+                // Per-pass safety report
+                var fluteOk   = tool.FluteLengthMm <= 0 || engagedMm + tool.SafetyMarginMm <= tool.FluteLengthMm;
+                var spindleOk = tool.ToolLengthMm <= 0 || engagedMm + tool.SafetyMarginMm < tool.ToolLengthMm;
+                if (!fluteOk)
+                    warnings.Add($"Layer {layer}: engaged {engagedMm:F1} mm exceeds flute length {tool.FluteLengthMm:F1} mm (with margin {tool.SafetyMarginMm:F1})");
+                if (!spindleOk)
+                    warnings.Add($"Layer {layer}: engaged {engagedMm:F1} mm exceeds tip-to-spindle {tool.ToolLengthMm:F1} mm — collision risk");
+
+                gcodeBuilder.AppendLine($"; ── Layer {layer}: top {partTopZ:F2}, band {layerBandMm:F2}, tip Z{effectiveZ:F3}, engaged {engagedMm:F2} / flute {tool.FluteLengthMm:F1} {(fluteOk ? "OK" : "WARN")}, spindle clr {(tool.ToolLengthMm > 0 ? tool.ToolLengthMm - engagedMm : 999):F1} {(spindleOk ? "OK" : "WARN")} [{layerData.OuterWallPaths.Count} segs] ─");
                 gcodeBuilder.AppendLine(combinedGCode.TrimEnd());
                 gcodeBuilder.AppendLine();
 

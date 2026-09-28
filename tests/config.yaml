@@ -1,0 +1,16 @@
+layer_height_mm: 0.2
+outer_wall_line_width_mm: 0.4
+tool:
+  name: "Holex 546910 E0307"
+  diameter_mm: 3.0
+  flute_length_mm: 7.0
+  tip_overlap_mm: 1.0
+  tip_shape: "rounded"
+  tool_length_mm: 19.0  # tip to spindle/collet
+  spindle_radius_mm: 10.0  # ASSUMPTION - flagged
+  safety_margin_mm: 0.5
+  max_rpm: 24000
+  feed_mm_per_min: 500
+tolerance_mm: 0.10
+bed_clearance_mm: 0.1
+# Print-to-CNC translation read from HybridSlicer config at runtime

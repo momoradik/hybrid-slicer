@@ -29,7 +29,8 @@ public sealed class ToolsController : ControllerBase
         var tool = CncTool.Create(
             req.Name, req.Type, req.DiameterMm, req.FluteLengthMm, req.ShankDiameterMm,
             req.FluteCount, req.ToolMaterial, req.MaxDepthOfCutMm,
-            req.RecommendedRpm, req.RecommendedFeedMmPerMin, req.ToolLengthMm);
+            req.RecommendedRpm, req.RecommendedFeedMmPerMin, req.ToolLengthMm,
+            req.TipOverlapMm, req.TipShape, req.SpindleRadiusMm, req.SafetyMarginMm);
         await _repo.AddAsync(tool, ct);
         return CreatedAtAction(nameof(GetById), new { id = tool.Id }, tool);
     }
@@ -42,7 +43,8 @@ public sealed class ToolsController : ControllerBase
         tool.Update(
             req.Name, req.Type, req.DiameterMm, req.FluteLengthMm, req.ShankDiameterMm,
             req.FluteCount, req.ToolMaterial, req.MaxDepthOfCutMm,
-            req.RecommendedRpm, req.RecommendedFeedMmPerMin, req.ToolLengthMm);
+            req.RecommendedRpm, req.RecommendedFeedMmPerMin, req.ToolLengthMm,
+            req.TipOverlapMm, req.TipShape, req.SpindleRadiusMm, req.SafetyMarginMm);
         await _repo.UpdateAsync(tool, ct);
         return Ok(tool);
     }
@@ -69,6 +71,10 @@ public record CreateToolRequest(
     double MaxDepthOfCutMm = 0,
     int RecommendedRpm = 10000,
     double RecommendedFeedMmPerMin = 500,
-    double ToolLengthMm = 50.0);
+    double ToolLengthMm = 50.0,
+    double TipOverlapMm = 0,
+    string TipShape = "flat",
+    double SpindleRadiusMm = 0,
+    double SafetyMarginMm = 0.5);
 
 public record UpdateCuttingParamsRequest(int RecommendedRpm, double FeedMmPerMin, double MaxDocMm);

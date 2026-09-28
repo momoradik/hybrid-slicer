@@ -119,6 +119,11 @@ try
                 "ALTER TABLE CustomGCodeBlocks ADD COLUMN EndLayer INTEGER NULL",
                 // MachineProfile: G-code flavor for CuraEngine
                 "ALTER TABLE MachineProfiles ADD COLUMN GCodeFlavor TEXT NOT NULL DEFAULT 'RepRap (Marlin/Sprinter)'",
+                // CncTool: tip/spindle geometry for auto-frequency safety checks
+                "ALTER TABLE CncTools ADD COLUMN TipOverlapMm REAL NOT NULL DEFAULT 0",
+                "ALTER TABLE CncTools ADD COLUMN TipShape TEXT NOT NULL DEFAULT 'flat'",
+                "ALTER TABLE CncTools ADD COLUMN SpindleRadiusMm REAL NOT NULL DEFAULT 0",
+                "ALTER TABLE CncTools ADD COLUMN SafetyMarginMm REAL NOT NULL DEFAULT 0.5",
             ];
             foreach (var sql in alters)
                 try { await db.Database.ExecuteSqlRawAsync(sql); } catch { /* column already exists */ }

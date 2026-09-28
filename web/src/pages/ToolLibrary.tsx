@@ -130,6 +130,8 @@ function ToolCard({ tool, onEdit, onDelete }: {
         <Spec label="Flute L" value={`${tool.fluteLengthMm}`} unit="mm" color="text-orange-400" />
         <Spec label="Tool L" value={`${tool.toolLengthMm ?? '—'}`} unit="mm" color="text-blue-400" />
         <Spec label="Flutes" value={`${tool.fluteCount}`} />
+        {(tool.tipOverlapMm ?? 0) > 0 && <Spec label="Tip OL" value={`${tool.tipOverlapMm}`} unit="mm" color="text-yellow-400" />}
+        {(tool.spindleRadiusMm ?? 0) > 0 && <Spec label="Spndl R" value={`${tool.spindleRadiusMm}`} unit="mm" />}
         <Spec label="RPM" value={tool.recommendedRpm.toLocaleString()} />
         <Spec label="Feed" value={`${tool.recommendedFeedMmPerMin}`} unit="mm/m" />
       </div>
@@ -353,6 +355,30 @@ export default function ToolLibrary() {
                     Flute length ({editing.fluteLengthMm} mm) exceeds tool length ({editing.toolLengthMm} mm).
                   </div>
                 )}
+
+                {/* Tip & Spindle Geometry */}
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2 font-medium">Tip &amp; Spindle Geometry</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField label="Tip Shape" tooltip="Shape of the cutting end. Determines if tip overlap is needed.">
+                      <select className="input w-full" value={editing.tipShape ?? 'flat'}
+                        onChange={e => set('tipShape', e.target.value)}>
+                        <option value="flat">Flat (end mill)</option>
+                        <option value="ball">Ball nose</option>
+                        <option value="rounded">Rounded / tapered</option>
+                      </select>
+                    </FormField>
+                    <FormField label="Tip Overlap (mm)" tooltip="Extra depth below band bottom for rounded tips. 0 for flat, ~1.0–1.5 for ball/rounded.">
+                      <NumericInput min={0} max={10} step={0.1} value={editing.tipOverlapMm ?? 0} onChange={v => set('tipOverlapMm', v)} />
+                    </FormField>
+                    <FormField label="Spindle/Collet Radius (mm)" tooltip="Radius of spindle body or collet nut. Must clear the part top during machining.">
+                      <NumericInput min={0} step={0.5} value={editing.spindleRadiusMm ?? 0} onChange={v => set('spindleRadiusMm', v)} />
+                    </FormField>
+                    <FormField label="Safety Margin (mm)" tooltip="Extra clearance added to flute-length and spindle checks. Default 0.5 mm.">
+                      <NumericInput min={0} max={5} step={0.1} value={editing.safetyMarginMm ?? 0.5} onChange={v => set('safetyMarginMm', v)} />
+                    </FormField>
+                  </div>
+                </div>
 
                 {/* Cutting parameters */}
                 <div>

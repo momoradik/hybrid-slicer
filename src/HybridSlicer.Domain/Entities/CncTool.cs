@@ -24,6 +24,19 @@ public class CncTool
     // Material
     public string ToolMaterial { get; private set; } = "HSS";
 
+    // Tip geometry
+    /// <summary>Extra depth (mm) below the band bottom to compensate for rounded/tapered tips.
+    /// 0 for flat end mills, ~1.0–1.5 for ball/rounded burrs.</summary>
+    public double TipOverlapMm { get; private set; }
+    /// <summary>Tip shape: "flat", "ball", "rounded". Informational — tip_overlap does the real work.</summary>
+    public string TipShape { get; private set; } = "flat";
+
+    // Spindle / collet geometry
+    /// <summary>Radius of the spindle body, collet or nut (mm). Must clear the part top during machining.</summary>
+    public double SpindleRadiusMm { get; private set; }
+    /// <summary>Extra safety margin (mm) added to flute-length and spindle-clearance checks.</summary>
+    public double SafetyMarginMm { get; private set; } = 0.5;
+
     // Recommended parameters
     public double MaxDepthOfCutMm { get; private set; }
     public int RecommendedRpm { get; private set; }
@@ -47,7 +60,11 @@ public class CncTool
         double maxDepthOfCutMm = 0,
         int recommendedRpm = 10000,
         double recommendedFeedMmPerMin = 500,
-        double toolLengthMm = 50.0)
+        double toolLengthMm = 50.0,
+        double tipOverlapMm = 0,
+        string tipShape = "flat",
+        double spindleRadiusMm = 0,
+        double safetyMarginMm = 0.5)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("INVALID_NAME", "Tool name must not be empty.");
@@ -65,6 +82,10 @@ public class CncTool
             ShankDiameterMm = shankDiameterMm,
             FluteCount = fluteCount,
             ToolMaterial = toolMaterial,
+            TipOverlapMm = tipOverlapMm,
+            TipShape = string.IsNullOrWhiteSpace(tipShape) ? "flat" : tipShape.Trim(),
+            SpindleRadiusMm = spindleRadiusMm,
+            SafetyMarginMm = safetyMarginMm,
             MaxDepthOfCutMm = maxDepthOfCutMm > 0 ? maxDepthOfCutMm : diameterMm * 0.25,
             RecommendedRpm = recommendedRpm,
             RecommendedFeedMmPerMin = recommendedFeedMmPerMin,
@@ -77,7 +98,8 @@ public class CncTool
         string name, ToolType type, double diameterMm, double fluteLengthMm,
         double shankDiameterMm, int fluteCount, string toolMaterial,
         double maxDepthOfCutMm, int recommendedRpm, double recommendedFeedMmPerMin,
-        double toolLengthMm)
+        double toolLengthMm, double tipOverlapMm = 0, string tipShape = "flat",
+        double spindleRadiusMm = 0, double safetyMarginMm = 0.5)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("INVALID_NAME", "Tool name must not be empty.");
@@ -92,6 +114,10 @@ public class CncTool
         ShankDiameterMm = shankDiameterMm;
         FluteCount = fluteCount;
         ToolMaterial = toolMaterial;
+        TipOverlapMm = tipOverlapMm;
+        TipShape = string.IsNullOrWhiteSpace(tipShape) ? "flat" : tipShape.Trim();
+        SpindleRadiusMm = spindleRadiusMm;
+        SafetyMarginMm = safetyMarginMm;
         MaxDepthOfCutMm = maxDepthOfCutMm > 0 ? maxDepthOfCutMm : diameterMm * 0.25;
         RecommendedRpm = recommendedRpm;
         RecommendedFeedMmPerMin = recommendedFeedMmPerMin;
