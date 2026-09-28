@@ -56,6 +56,7 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
         AppendCustomBlocks(output, request.EnabledCustomBlocks, GCodeTrigger.JobStart, plan, ref stepIndex);
 
         int printStart = -1; // last layer that has been flushed into output (-1 = include layer 0)
+        string? lastPrintPosition = null; // last XY from the previous print batch
 
         // Use the actual machined layers from the parsed toolpath (sorted ascending).
         // Filter out comment-only layers (skipped due to SpindleCollision, ToolTooWide, etc.)
@@ -79,16 +80,15 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
             if (!string.IsNullOrWhiteSpace(printFrag))
             {
                 output.AppendLine($"; --- Print layers {printStart + 1}–{layer} ---");
-                // Insert a rapid travel to the first print position so the nozzle
-                // doesn't extrude across the bed from the CNC park position.
-                if (i > 0) // after a CNC pass, nozzle is at CNC position
-                {
-                    var travel = ExtractFirstXY(printFrag);
-                    if (travel is not null)
-                        output.AppendLine(travel);
-                }
+                // After a CNC pass, travel to where printing last stopped so the
+                // first extrusion move covers its full length (not zero-length).
+                if (i > 0 && lastPrintPosition is not null)
+                    output.AppendLine(lastPrintPosition);
                 output.Append(printFrag);
                 output.AppendLine();
+
+                // Record where this batch ends so the next resume goes there
+                lastPrintPosition = ExtractLastXY(printFrag);
 
                 plan.AddStep(ProcessStep.CreatePrintStep(
                     plan.Id, stepIndex++, printStart + 1, layer, printFrag));
@@ -143,13 +143,9 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
             if (!string.IsNullOrWhiteSpace(lastFrag))
             {
                 output.AppendLine($"; --- Print layers {printStart + 1}–{lastLayer} ---");
-                // Travel to first print position after last CNC pass
-                if (sortedLayers.Count > 0)
-                {
-                    var travel = ExtractFirstXY(lastFrag);
-                    if (travel is not null)
-                        output.AppendLine(travel);
-                }
+                // After last CNC pass, travel to where printing last stopped
+                if (sortedLayers.Count > 0 && lastPrintPosition is not null)
+                    output.AppendLine(lastPrintPosition);
                 output.Append(lastFrag);
                 output.AppendLine();
 
@@ -278,13 +274,13 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
     }
 
     /// <summary>
-    /// Scans a G-code fragment for the first G0 or G1 move with X/Y coordinates
-    /// and returns a G0 rapid-travel command to that position. Used to insert
-    /// a safe travel move before each print batch so the nozzle doesn't extrude
-    /// across the bed from the CNC park position.
+    /// Scans a G-code fragment for the LAST G0/G1 move with X/Y coordinates.
+    /// Returns the final nozzle position as a G0 rapid-travel command.
+    /// Used to record where printing stopped before a CNC pass.
     /// </summary>
-    private static string? ExtractFirstXY(string gcode)
+    private static string? ExtractLastXY(string gcode)
     {
+        string? lastX = null, lastY = null, lastZ = null;
         foreach (var rawLine in gcode.Split('\n'))
         {
             var line = rawLine.Trim();
@@ -294,18 +290,17 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
                   upper.StartsWith("G00 ") || upper.StartsWith("G01 "))) continue;
             var xm = System.Text.RegularExpressions.Regex.Match(upper, @"X([+-]?[\d.]+)");
             var ym = System.Text.RegularExpressions.Regex.Match(upper, @"Y([+-]?[\d.]+)");
-            if (xm.Success || ym.Success)
-            {
-                var coords = "";
-                if (xm.Success) coords += $" X{xm.Groups[1].Value}";
-                if (ym.Success) coords += $" Y{ym.Groups[1].Value}";
-                // Also extract Z if present (first layer move often includes Z)
-                var zm = System.Text.RegularExpressions.Regex.Match(upper, @"Z([+-]?[\d.]+)");
-                if (zm.Success) coords += $" Z{zm.Groups[1].Value}";
-                return $"G0{coords} F6000 ; travel to print position";
-            }
+            var zm = System.Text.RegularExpressions.Regex.Match(upper, @"Z([+-]?[\d.]+)");
+            if (xm.Success) lastX = xm.Groups[1].Value;
+            if (ym.Success) lastY = ym.Groups[1].Value;
+            if (zm.Success) lastZ = zm.Groups[1].Value;
         }
-        return null;
+        if (lastX is null && lastY is null) return null;
+        var coords = "";
+        if (lastX is not null) coords += $" X{lastX}";
+        if (lastY is not null) coords += $" Y{lastY}";
+        if (lastZ is not null) coords += $" Z{lastZ}";
+        return $"G0{coords} F6000 ; travel to print resume position";
     }
 
     /// <summary>
