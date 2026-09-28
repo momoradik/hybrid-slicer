@@ -176,7 +176,7 @@ public sealed class JobsController : ControllerBase
         if (!System.IO.File.Exists(job.HybridGCodePath)) return NotFound("G-code file not found on disk.");
 
         var stream = System.IO.File.OpenRead(job.HybridGCodePath);
-        return File(stream, "text/plain", $"hybrid_{id}.gcode");
+        return File(stream, "text/plain", $"{job.Name}_Hybrid.gcode");
     }
 
     /// <summary>

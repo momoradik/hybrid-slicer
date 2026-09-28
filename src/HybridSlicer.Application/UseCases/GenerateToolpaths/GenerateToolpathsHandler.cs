@@ -688,16 +688,14 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     layerData.OuterWallPaths.Count, layerData.InnerWallPaths.Count);
             }
 
-            // Postamble: lift 20mm above the last machined layer for safety, then stop spindle.
-            // Previous code moved to a fixed absolute Z (resolvedEndZ) which could be
-            // far from the part (e.g. Z190), causing a huge unnecessary move.
+            // Postamble: lift SafeClearanceHeightMm above the last machined layer, then stop spindle.
             var lastMachinedLayerZ = layersToMachine.Any()
                 ? layersToMachine.Last() * profile.LayerHeightMm
                 : 0.0;
-            var postambleSafeZ = lastMachinedLayerZ + 20.0; // 20mm above printed height
+            var postambleSafeZ = lastMachinedLayerZ + cncOffset.Z + machine.SafeClearanceHeightMm;
             gcodeBuilder.AppendLine();
             gcodeBuilder.AppendLine("; === Postamble: lift above part and stop spindle ===");
-            gcodeBuilder.AppendLine($"G0 Z{postambleSafeZ.ToString("F3", inv)} ; 20mm above last machined layer");
+            gcodeBuilder.AppendLine($"G0 Z{postambleSafeZ.ToString("F3", inv)} F6000 ; {machine.SafeClearanceHeightMm}mm above last machined layer");
             gcodeBuilder.AppendLine("M5 ; spindle stop");
 
             // Write toolpath file
