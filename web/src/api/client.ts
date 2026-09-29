@@ -56,6 +56,7 @@ export const jobsApi = {
     spindleStartX = 0, spindleStartY = 0, spindleStartZ: number | null = null,
     spindleEndX = 0, spindleEndY = 0, spindleEndZ: number | null = null,
     skipMachiningLayers = 0,
+    remachineLowerLayers = 0,
   ) =>
     http.post(`/jobs/${id}/generate-toolpaths`, {
       cncToolId: toolId,
@@ -69,6 +70,7 @@ export const jobsApi = {
       spindleStartX, spindleStartY, spindleStartZ,
       spindleEndX, spindleEndY, spindleEndZ,
       skipMachiningLayers,
+      remachineLowerLayers,
     }).then(r => r.data),
 
   planHybrid: (id: string, machineEveryN: number) =>

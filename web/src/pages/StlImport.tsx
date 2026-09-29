@@ -180,6 +180,7 @@ interface SavedState {
   cncToolId: string
   machineEveryN: number
   skipMachiningLayers: number  // skip first N layers before machining starts
+  remachineLowerLayers: number // re-cut N already-machined layers below each band
   machineInnerWalls: boolean
   avoidSupports: boolean
   supportClearanceMm: number
@@ -194,7 +195,7 @@ const _initState: SavedState = {
   supportPlacement: 'everywhere', infillPattern: 'grid', infillDensity: 15,
   supportInfillPattern: 'grid', supportInfillDensity: 15, adhesionType: 'none',
   gcodeHoming: true, gcodeLevelling: false, applyCustomGCodeBlocks: true,
-  cncToolId: '', machineEveryN: 10, skipMachiningLayers: 0, machineInnerWalls: false, avoidSupports: false,
+  cncToolId: '', machineEveryN: 10, skipMachiningLayers: 0, remachineLowerLayers: 0, machineInnerWalls: false, avoidSupports: false,
   supportClearanceMm: 2.0, autoMachiningFrequency: false, zSafetyOffsetMm: 0,
   spindleRpmOverride: null,
 }
@@ -249,6 +250,7 @@ export default function StlImport() {
   const [cncToolId, setCncToolId]                       = useState(() => _saved.cncToolId)
   const [machineEveryN, setMachineEveryN]               = useState(() => _saved.machineEveryN)
   const [skipMachiningLayers, setSkipMachiningLayers]   = useState(() => _saved.skipMachiningLayers)
+  const [remachineLowerLayers, setRemachineLowerLayers] = useState(() => _saved.remachineLowerLayers)
   const [machineInnerWalls, setMachineInnerWalls]       = useState(() => _saved.machineInnerWalls)
   const [avoidSupports, setAvoidSupports]               = useState(() => _saved.avoidSupports)
   const [supportClearanceMm, setSupportClearanceMm]     = useState(() => _saved.supportClearanceMm)
@@ -337,6 +339,7 @@ export default function StlImport() {
   useEffect(() => { _saved.cncToolId = cncToolId }, [cncToolId])
   useEffect(() => { _saved.machineEveryN = machineEveryN }, [machineEveryN])
   useEffect(() => { _saved.skipMachiningLayers = skipMachiningLayers }, [skipMachiningLayers])
+  useEffect(() => { _saved.remachineLowerLayers = remachineLowerLayers }, [remachineLowerLayers])
   useEffect(() => { _saved.machineInnerWalls = machineInnerWalls }, [machineInnerWalls])
   useEffect(() => { _saved.avoidSupports = avoidSupports }, [avoidSupports])
   useEffect(() => { _saved.supportClearanceMm = supportClearanceMm }, [supportClearanceMm])
@@ -654,7 +657,7 @@ export default function StlImport() {
               jobIds[0], cncToolId, machineEveryN,
               machineInnerWalls, avoidSupports, supportClearanceMm,
               autoMachiningFrequency, zSafetyOffsetMm, spindleRpmOverride,
-              0, 0, null, 0, 0, null, skipMachiningLayers,
+              0, 0, null, 0, 0, null, skipMachiningLayers, remachineLowerLayers,
             )
             await jobsApi.planHybrid(jobIds[0], machineEveryN)
           }
@@ -1400,6 +1403,24 @@ export default function StlImport() {
                     </span>
                   )}
                 </div>
+              </Field>
+
+              <Field label="Re-machine lower layers">
+                <div className="flex items-center gap-2">
+                  <input type="number" min={0} max={machineEveryN * 3} step={1} value={remachineLowerLayers}
+                    onChange={e => setRemachineLowerLayers(Math.max(0, Math.min(machineEveryN * 3, Math.round(+e.target.value) || 0)))}
+                    className="input w-20 text-center" />
+                  <span className="text-xs text-gray-500">layers</span>
+                  {selectedProfile && remachineLowerLayers > 0 && (
+                    <span className="text-xs text-gray-600">
+                      ≈ {(remachineLowerLayers * (selectedProfile.layerHeightMm ?? 0.2)).toFixed(1)} mm overlap
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-600 mt-0.5">
+                  Re-cuts N already-machined layers below each band to clean ooze/sag.
+                  E.g. freq=5, layer 15: 0 → layers 11–15, 2 → layers 9–15.
+                </p>
               </Field>
 
               {!autoMachiningFrequency && (

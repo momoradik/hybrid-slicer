@@ -286,7 +286,10 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
 
                     var gcode = BuildGCode(arc, zCut, zSafe,
                         request.FeedRateMmPerMin, request.SpindleRpm,
-                        dx, dy, request.ClimbMilling);
+                        dx, dy, request.ClimbMilling,
+                        request.SpindleDwellSec, request.LeadInRadiusMm,
+                        request.EndOverlapMm, request.LeadInFeedFraction,
+                        request.PassIndex);
                     gcodeBuilder.AppendLine(gcode);
                     allBounds.Add(compBounds);
                 }
@@ -510,21 +513,135 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
         double zCut, double zSafe,
         double feed, int rpm,
         double dx, double dy,
-        bool climb)
+        bool climb,
+        double dwellSec = 3.0,
+        double leadInRadius = 2.0,
+        double endOverlap = 3.0,
+        double leadInFeedFrac = 0.5,
+        int passIndex = 0)
     {
-        if (coords.Count == 0) return string.Empty;
+        if (coords.Count < 2) return string.Empty;
+        // DEBUG MARKER: if this line appears in output, the new BuildGCode is running
 
-        var pts = climb ? coords : coords.Reverse().ToList();
+        var pts = climb ? coords.ToList() : coords.Reverse().ToList();
+
+        // ── Rotate start point by passIndex to avoid stacking marks ──────────
+        if (passIndex > 0 && pts.Count > 2)
+        {
+            // Compute total contour length, then offset by passIndex * 10mm
+            var lengths = new double[pts.Count];
+            double totalLen = 0;
+            for (int i = 1; i < pts.Count; i++)
+            {
+                var segDx = pts[i].X - pts[i - 1].X;
+                var segDy = pts[i].Y - pts[i - 1].Y;
+                totalLen += Math.Sqrt(segDx * segDx + segDy * segDy);
+                lengths[i] = totalLen;
+            }
+            var shiftDist = (passIndex * 10.0) % totalLen;
+            if (shiftDist > 1.0)
+            {
+                // Find the vertex closest to shiftDist along the contour
+                var bestIdx = 1;
+                for (int i = 1; i < pts.Count; i++)
+                {
+                    if (lengths[i] >= shiftDist) { bestIdx = i; break; }
+                }
+                // Rotate the list so bestIdx becomes the start
+                var rotated = new List<(double X, double Y)>();
+                for (int i = bestIdx; i < pts.Count; i++) rotated.Add(pts[i]);
+                for (int i = 1; i <= bestIdx; i++) rotated.Add(pts[i]); // skip [0] since it == [last]
+                pts = rotated;
+            }
+        }
+
+        // Ensure the contour is closed (last point == first)
+        var first = pts[0];
+        var last = pts[^1];
+        var isClosed = Math.Abs(last.X - first.X) < 0.01 && Math.Abs(last.Y - first.Y) < 0.01;
+
+        // ── Compute outward normal at the start point ────────────────────────
+        // Direction from start to next point → tangent; rotate 90° outward
+        var tangX = pts[1].X - pts[0].X;
+        var tangY = pts[1].Y - pts[0].Y;
+        var tangLen = Math.Sqrt(tangX * tangX + tangY * tangY);
+        if (tangLen < 0.001) tangLen = 1;
+        tangX /= tangLen; tangY /= tangLen;
+        // Outward normal: for climb milling (CW around outer), outward is to the LEFT of travel
+        // For conventional (CCW), outward is to the RIGHT
+        var normX = climb ? -tangY : tangY;
+        var normY = climb ? tangX : -tangX;
+
+        // Lead-in start: offset from contour start along outward normal
+        var leadClearance = 0.5; // mm extra beyond the lead-in radius
+        var offDist = leadInRadius + leadClearance;
+        var leadStartX = pts[0].X + normX * offDist;
+        var leadStartY = pts[0].Y + normY * offDist;
+
+        // Arc centre: midpoint between lead-in start and contour start
+        var arcCX = pts[0].X + normX * (leadInRadius / 2.0);
+        var arcCY = pts[0].Y + normY * (leadInRadius / 2.0);
+        // I/J: offset from lead-in start to arc centre
+        var leadI = arcCX - leadStartX;
+        var leadJ = arcCY - leadStartY;
+        // Arc command: G2 for CW, G3 for CCW (climb=CW outer, conventional=CCW)
+        var arcCmd = climb ? "G2" : "G3";
+        var arcCmdOut = climb ? "G3" : "G2"; // lead-out goes the other way
+
+        var leadFeed = (int)(feed * leadInFeedFrac);
 
         var sb = new StringBuilder();
-        sb.AppendLine($"; === Contour Milling Z={zCut:F3}  retract={zSafe:F3} ===");
+        sb.AppendLine($"; === Contour Milling Z={zCut:F3}  retract={zSafe:F3} lead-in={leadInRadius:F1} overlap={endOverlap:F1} ===");
+
+        // A. Spindle start + dwell
         sb.AppendLine($"M3 S{rpm}");
-        sb.AppendLine($"G0 Z{zSafe:F3} F6000 ; retract");
-        sb.AppendLine($"G0 X{pts[0].X + dx:F3} Y{pts[0].Y + dy:F3} F6000 ; travel to start");
-        sb.AppendLine($"G1 Z{zCut:F3} F{feed * 0.3:F0} ; plunge");
+        if (dwellSec > 0)
+            sb.AppendLine($"G4 S{dwellSec:F1} ; spindle spin-up dwell {dwellSec:F1} s");
+
+        // B. Lead-in: rapid to off-part position, plunge in free air, arc onto wall
+        sb.AppendLine($"G0 Z{zSafe:F3} F6000 ; retract to safe height");
+        sb.AppendLine($"; lead-in start (off part) X{leadStartX + dx:F3} Y{leadStartY + dy:F3}");
+        sb.AppendLine($"G0 X{leadStartX + dx:F3} Y{leadStartY + dy:F3} F6000 ; travel to lead-in (off part)");
+        sb.AppendLine($"; plunge in air to Z{zCut:F3}");
+        sb.AppendLine($"G1 Z{zCut:F3} F{feed * 0.3:F0} ; plunge in free air");
+        sb.AppendLine($"; lead-in arc");
+        sb.AppendLine($"{arcCmd} X{pts[0].X + dx:F3} Y{pts[0].Y + dy:F3} I{leadI:F3} J{leadJ:F3} F{leadFeed} ; lead-in arc");
+
+        // Contour
+        sb.AppendLine($"; contour");
         sb.AppendLine($"G1 F{feed:F0}");
         foreach (var pt in pts.Skip(1))
             sb.AppendLine($"G1 X{pt.X + dx:F3} Y{pt.Y + dy:F3}");
+
+        // C. End overlap: continue past the start point
+        if (endOverlap > 0 && isClosed)
+        {
+            sb.AppendLine($"; end overlap {endOverlap:F1} mm");
+            double overlapDist = 0;
+            for (int i = 1; i < pts.Count && overlapDist < endOverlap; i++)
+            {
+                var segDx2 = pts[i].X - pts[i - 1].X;
+                var segDy2 = pts[i].Y - pts[i - 1].Y;
+                var segLen2 = Math.Sqrt(segDx2 * segDx2 + segDy2 * segDy2);
+                overlapDist += segLen2;
+                sb.AppendLine($"G1 X{pts[i].X + dx:F3} Y{pts[i].Y + dy:F3}");
+            }
+        }
+
+        // Lead-out: arc away from wall, then retract in free air
+        // Compute outward normal at the current position (end of overlap or end of contour)
+        var exitPt = isClosed && endOverlap > 0
+            ? pts[Math.Min((int)(endOverlap / (tangLen > 0.001 ? tangLen : 1)) + 1, pts.Count - 1)]
+            : pts[^1];
+        // Use the same outward offset for lead-out
+        var leadOutX = exitPt.X + normX * offDist;
+        var leadOutY = exitPt.Y + normY * offDist;
+        var outI = (exitPt.X + normX * (leadInRadius / 2.0)) - exitPt.X;
+        var outJ = (exitPt.Y + normY * (leadInRadius / 2.0)) - exitPt.Y;
+
+        sb.AppendLine($"; lead-out arc");
+        sb.AppendLine($"{arcCmdOut} X{leadOutX + dx:F3} Y{leadOutY + dy:F3} I{outI:F3} J{outJ:F3} F{leadFeed} ; lead-out arc");
+        sb.AppendLine($"; retract (clear of part)");
         sb.AppendLine($"G0 Z{zSafe:F3} F6000 ; retract");
         sb.AppendLine("M5");
         sb.AppendLine($"; === End Contour Z={zCut:F3} ===");

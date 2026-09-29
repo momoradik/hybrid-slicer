@@ -119,7 +119,8 @@ public sealed class JobsController : ControllerBase
                 request.SpindleEndZ,
                 request.SkipMachiningLayers,
                 request.TipOverlapMm,
-                request.BedClearanceMm), ct);
+                request.BedClearanceMm,
+                request.RemachineLowerLayers), ct);
         return Accepted(result);
     }
 
@@ -405,7 +406,8 @@ public record GenerateToolpathsRequest(
     double? SpindleEndZ             = null,
     int    SkipMachiningLayers      = 0,
     double TipOverlapMm             = 0.0,
-    double BedClearanceMm           = 0.1);
+    double BedClearanceMm           = 0.1,
+    int    RemachineLowerLayers     = 0);
 public record PlanHybridRequest(int MachineEveryNLayers);
 public record MergeBedsRequest(
     IReadOnlyList<Guid> JobIds,

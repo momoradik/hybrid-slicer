@@ -52,7 +52,11 @@ public sealed record GenerateToolpathsCommand(
     /// 0 for flat end mills, ~1.0–1.5 for ball/rounded burrs.</summary>
     double TipOverlapMm = 0.0,
     /// <summary>Minimum Z above the bed (mm). The tool tip never goes below this.</summary>
-    double BedClearanceMm = 0.1) : IRequest<GenerateToolpathsResult>;
+    double BedClearanceMm = 0.1,
+    /// <summary>Number of already-machined layers below each band to re-cut.
+    /// Compensates for ooze/sag on the first layers printed after a CNC pass.
+    /// 0 = current behaviour (no overlap). E.g. 2 with frequency 5 at layer 15 → cuts layers 9–15.</summary>
+    int RemachineLowerLayers = 0) : IRequest<GenerateToolpathsResult>;
 
 public sealed record GenerateToolpathsResult(
     Guid                 JobId,

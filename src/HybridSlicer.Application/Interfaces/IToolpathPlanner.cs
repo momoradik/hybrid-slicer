@@ -54,7 +54,17 @@ public sealed record WallPathsRequest(
     double? PartTopZMm = null,
     IReadOnlyList<IReadOnlyList<(double X, double Y)>>? SupportPaths = null,
     /// <summary>XY clearance (mm) added around each support region as a forbidden zone.</summary>
-    double SupportClearanceMm = 2.0);
+    double SupportClearanceMm = 2.0,
+    /// <summary>Spindle spin-up dwell time in seconds after M3.</summary>
+    double SpindleDwellSec = 3.0,
+    /// <summary>Lead-in/out arc radius (mm). Tool enters tangentially from this distance off-part.</summary>
+    double LeadInRadiusMm = 2.0,
+    /// <summary>End overlap distance (mm). Tool continues past the start point to re-cut the entry.</summary>
+    double EndOverlapMm = 3.0,
+    /// <summary>Lead-in feed rate as a fraction of cutting feed (0.0–1.0).</summary>
+    double LeadInFeedFraction = 0.5,
+    /// <summary>Pass index (0-based) used to rotate the start point between passes.</summary>
+    int PassIndex = 0);
 
 public sealed record ToolpathRequest(
     string StlFilePath,

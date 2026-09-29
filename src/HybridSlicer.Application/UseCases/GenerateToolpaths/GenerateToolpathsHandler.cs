@@ -423,11 +423,27 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                 if ((partLayerCount - cmd.SkipMachiningLayers) % cmd.MachineEveryNLayers == 0)
                     manualLayers.Add(li);
             }
+            // Always machine the last part layer so no band is left uncut at the top
+            if (manualLayers.Count > 0 && manualLayers[^1] != job.TotalPrintLayers!.Value)
+            {
+                // Find the last part layer (might differ from TotalPrintLayers if last layers are support-only)
+                for (var li = job.TotalPrintLayers!.Value; li >= 1; li--)
+                {
+                    var ci = li - 1;
+                    if (parsed.Layers.TryGetValue(ci, out var ld) &&
+                        (ld.OuterWallPaths.Count > 0 || ld.InnerWallPaths.Count > 0))
+                    {
+                        if (!manualLayers.Contains(li)) manualLayers.Add(li);
+                        break;
+                    }
+                }
+            }
             layersToMachine = manualLayers;
             _logger.LogInformation(
                 "Manual machining schedule (every {N} part layers): {Sched} events from {Part} part layers ({Total} total)",
                 cmd.MachineEveryNLayers, manualLayers.Count, partLayerCount, job.TotalPrintLayers!.Value);
             gcodeBuilder.AppendLine($"; MANUAL machining: every {cmd.MachineEveryNLayers} part layer(s)  " +
+                                    $"Re-machine lower layers: {cmd.RemachineLowerLayers}  " +
                                     $"({partLayerCount} part layers / {job.TotalPrintLayers!.Value} total → {manualLayers.Count} event(s))");
             gcodeBuilder.AppendLine();
         }
@@ -439,25 +455,59 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
             // not the top, so the flutes machine the full band height.
             double previousTopZ = 0.0;
 
+            // Build a map from 1-based layer number to the ACTUAL Cura Z height,
+            // so we never compute layer*h (which is wrong when layer 0 is at Z=h, not Z=0).
+            var layerActualZ = new Dictionary<int, double>();
+            for (var li = 1; li <= job.TotalPrintLayers!.Value; li++)
+            {
+                var ci = li - 1;
+                if (parsed.Layers.TryGetValue(ci, out var ld))
+                    layerActualZ[li] = ld.ZHeightMm;
+                else
+                    layerActualZ[li] = li * h; // fallback if layer not parsed
+            }
+
+            var effectiveTipOverlap = cmd.TipOverlapMm > 0 ? cmd.TipOverlapMm : tool.TipOverlapMm;
+            var reK = Math.Max(0, cmd.RemachineLowerLayers);
+
             // Handler uses 1-based layer numbers; Cura uses 0-based
             foreach (var layer in layersToMachine)
             {
                 var curaLayerIdx = layer - 1;   // convert to Cura 0-based index
-                // Top of the printed part at this layer.
-                // Cura layer 0 prints at Z=layerHeight, so top = (curaIdx+1) * h = layer * h.
-                var partTopZ     = layer * profile.LayerHeightMm;
-                // Tool tip goes to the bottom of the band to machine the full interval.
-                // tipOverlap from tool definition (command override takes precedence if > 0).
-                var effectiveTipOverlap = cmd.TipOverlapMm > 0 ? cmd.TipOverlapMm : tool.TipOverlapMm;
-                var tipZ = Math.Max(previousTopZ - effectiveTipOverlap, cmd.BedClearanceMm);
+                // Top of the printed part at this layer — from the ACTUAL Cura G-code Z.
+                var partTopZ = layerActualZ.GetValueOrDefault(layer, layer * h);
+
+                // Band bottom: previous pass top, extended down by re-machine overlap (K layers).
+                var bandBottomZ = previousTopZ;
+                if (reK > 0 && previousTopZ > 0)
+                {
+                    // Find the Z of the layer K layers below the previous pass top.
+                    // Walk backwards through layerActualZ to find it.
+                    var overlapTarget = layer - (int)Math.Round((partTopZ - previousTopZ) / h) - reK;
+                    overlapTarget = Math.Max(1, overlapTarget); // can't go below layer 1
+                    bandBottomZ = layerActualZ.GetValueOrDefault(overlapTarget, Math.Max(overlapTarget * h, 0));
+                    bandBottomZ = Math.Max(bandBottomZ - h, 0); // bottom of that layer, not top
+                }
+
+                // Tool tip goes to the bottom of the band.
+                var tipZ = Math.Max(bandBottomZ - effectiveTipOverlap, cmd.BedClearanceMm);
                 var effectiveZ = tipZ + cmd.ZSafetyOffsetMm;
-                var layerBandMm = partTopZ - previousTopZ;
+                var layerBandMm = partTopZ - bandBottomZ;
                 var engagedMm = partTopZ - tipZ;
-                // zHeight is used for header comments and layer labelling
                 var zHeight = partTopZ;
 
                 _logger.LogDebug("Processing layer {Layer} (Cura ;LAYER:{CI}) Z={Z:F3} effectiveZ={EZ:F3}",
                     layer, curaLayerIdx, zHeight, effectiveZ);
+
+                // ── Guard: sanity check that Z is rising ─────────────────────────────
+                if (layerBandMm <= 0 && previousTopZ > 0)
+                {
+                    warnings.Add($"Layer {layer}: band height is {layerBandMm:F2} mm (top {partTopZ:F2}, bottom {bandBottomZ:F2}). " +
+                        "Band must be positive. Skipping this pass.");
+                    gcodeBuilder.AppendLine($"; Layer {layer} — SKIPPED: band height {layerBandMm:F2} mm <= 0 (top {partTopZ:F2}, bottom {bandBottomZ:F2})");
+                    previousTopZ = partTopZ;
+                    continue;
+                }
 
                 // ── Spindle clearance pre-check ────────────────────────────────────────
                 // When tool tip is at effectiveZ, the spindle collet is at effectiveZ + toolLengthMm.
@@ -476,6 +526,7 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                         $"; Layer {layer} Z={effectiveZ:F3} mm — SPINDLE COLLISION " +
                         $"(spindle at {spindleZ:F3} mm > machine Z {machine.BedHeightMm} mm) — skipped");
                     gcodeBuilder.AppendLine();
+                    previousTopZ = partTopZ; // advance baseline even when skipped
                     continue;
                 }
 
@@ -491,6 +542,7 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     gcodeBuilder.AppendLine($"; Layer {layer} (Z={zHeight:F3} mm) — no Cura data, skipped");
                     gcodeBuilder.AppendLine();
                     _logger.LogDebug("No parsed data for Cura layer {CI}", curaLayerIdx);
+                    previousTopZ = partTopZ; // advance baseline even when skipped
                     continue;
                 }
 
@@ -540,10 +592,12 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     gcodeBuilder.AppendLine($"; Layer {layer} (Z={zHeight:F3} mm) — no wall paths found, skipped");
                     gcodeBuilder.AppendLine();
                     _logger.LogDebug("Layer {L}: no wall paths", layer);
+                    previousTopZ = partTopZ; // advance baseline even when skipped
                     continue;
                 }
 
                 // Generate CNC toolpath from EXTERIOR walls (always).
+                var passIdx = machinedLayers.Count; // 0-based pass index for start-point rotation
                 var outerRequest = new WallPathsRequest(
                     WallPaths:              exteriorPaths,
                     ZHeightMm:              effectiveZ,
@@ -557,7 +611,8 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     ClimbMilling:           true,
                     PartTopZMm:             partTopZ + cncOffset.Z,
                     SupportPaths:           supportPaths,
-                    SupportClearanceMm:     cmd.SupportClearanceMm);
+                    SupportClearanceMm:     cmd.SupportClearanceMm,
+                    PassIndex:              passIdx);
 
                 var toolpath = exteriorPaths.Count > 0
                     ? await _planner.PlanFromWallPathsAsync(outerRequest, ct)
@@ -600,6 +655,7 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     gcodeBuilder.AppendLine($"; Layer {layer} (Z={zHeight:F3} mm) — planner returned empty, skipped");
                     gcodeBuilder.AppendLine();
                     _logger.LogDebug("Layer {L}: planner returned empty toolpath", layer);
+                    previousTopZ = partTopZ; // advance baseline even when skipped
                     continue;
                 }
 
@@ -676,12 +732,13 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                 if (!spindleOk)
                     warnings.Add($"Layer {layer}: engaged {engagedMm:F1} mm exceeds tip-to-spindle {tool.ToolLengthMm:F1} mm — collision risk");
 
-                gcodeBuilder.AppendLine($"; ── Layer {layer}: top {partTopZ:F2}, band {layerBandMm:F2}, tip Z{effectiveZ:F3}, engaged {engagedMm:F2} / flute {tool.FluteLengthMm:F1} {(fluteOk ? "OK" : "WARN")}, spindle clr {(tool.ToolLengthMm > 0 ? tool.ToolLengthMm - engagedMm : 999):F1} {(spindleOk ? "OK" : "WARN")} [{layerData.OuterWallPaths.Count} segs] ─");
+                var bandBottomLayer = reK > 0 ? Math.Max(1, layer - (int)Math.Round(layerBandMm / h)) : Math.Max(1, layer - cmd.MachineEveryNLayers + 1);
+                gcodeBuilder.AppendLine($"; ── Pass @ layer {layer} (;LAYER:{curaLayerIdx}): layers {bandBottomLayer}–{layer}, Z {bandBottomZ:F2}–{partTopZ:F2}, tip Z{effectiveZ:F3}, engaged {engagedMm:F2} / flute {tool.FluteLengthMm:F1} {(fluteOk ? "OK" : "WARN")}, spindle clr {(tool.ToolLengthMm > 0 ? tool.ToolLengthMm - engagedMm : 999):F1} {(spindleOk ? "OK" : "WARN")} [{layerData.OuterWallPaths.Count} segs]{(reK > 0 ? $" re-machine:{reK}" : "")} ─");
                 gcodeBuilder.AppendLine(combinedGCode.TrimEnd());
                 gcodeBuilder.AppendLine();
 
                 machinedLayers.Add(layer);
-                previousTopZ = partTopZ; // next pass starts from here
+                previousTopZ = partTopZ; // advance baseline for next pass
                 _logger.LogInformation(
                     "Toolpath OK — layer {L} Z={Z:F3} [{Status}]  {OW} outer + {IW} inner segments",
                     layer, zHeight, validation.Status,
