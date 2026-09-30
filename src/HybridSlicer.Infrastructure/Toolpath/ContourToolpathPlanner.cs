@@ -279,6 +279,7 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
                     millingArcs = [contourLine.Coordinates.Select(c => (c.X, c.Y)).ToList()];
                 }
 
+                var segIdx = 0;
                 foreach (var arc in millingArcs)
                 {
                     if (arc.Count < 2) continue;
@@ -289,9 +290,11 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
                         dx, dy, request.ClimbMilling,
                         request.SpindleDwellSec, request.LeadInRadiusMm,
                         request.EndOverlapMm, request.LeadInFeedFraction,
-                        request.PassIndex);
+                        request.PassIndex * 10 + segIdx,
+                        isFirstSegment: segIdx == 0); // dwell only on first segment
                     gcodeBuilder.AppendLine(gcode);
                     allBounds.Add(compBounds);
+                    segIdx++;
                 }
             }
 
@@ -562,137 +565,171 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
         double leadInRadius = 2.0,
         double endOverlap = 3.0,
         double leadInFeedFrac = 0.5,
-        int passIndex = 0)
+        int passIndex = 0,
+        bool isFirstSegment = true)
     {
         if (coords.Count < 2) return string.Empty;
-        // DEBUG MARKER: if this line appears in output, the new BuildGCode is running
 
         var pts = climb ? coords.ToList() : coords.Reverse().ToList();
 
-        // ── Rotate start point by passIndex to avoid stacking marks ──────────
-        if (passIndex > 0 && pts.Count > 2)
+        // ── Rotate start point by passIndex ──────────────────────────────────
+        if (passIndex > 0 && pts.Count > 4)
         {
-            // Compute total contour length, then offset by passIndex * 10mm
-            var lengths = new double[pts.Count];
-            double totalLen = 0;
-            for (int i = 1; i < pts.Count; i++)
+            var nVerts = pts.Count - 1;
+            var shift = (passIndex * 7) % nVerts;
+            if (shift > 0)
             {
-                var segDx = pts[i].X - pts[i - 1].X;
-                var segDy = pts[i].Y - pts[i - 1].Y;
-                totalLen += Math.Sqrt(segDx * segDx + segDy * segDy);
-                lengths[i] = totalLen;
-            }
-            var shiftDist = (passIndex * 10.0) % totalLen;
-            if (shiftDist > 1.0)
-            {
-                // Find the vertex closest to shiftDist along the contour
-                var bestIdx = 1;
-                for (int i = 1; i < pts.Count; i++)
-                {
-                    if (lengths[i] >= shiftDist) { bestIdx = i; break; }
-                }
-                // Rotate the list so bestIdx becomes the start
                 var rotated = new List<(double X, double Y)>();
-                for (int i = bestIdx; i < pts.Count; i++) rotated.Add(pts[i]);
-                for (int i = 1; i <= bestIdx; i++) rotated.Add(pts[i]); // skip [0] since it == [last]
+                for (int i = shift; i < pts.Count; i++) rotated.Add(pts[i]);
+                for (int i = 1; i <= shift; i++) rotated.Add(pts[i]);
                 pts = rotated;
             }
         }
 
-        // Ensure the contour is closed (last point == first)
-        var first = pts[0];
-        var last = pts[^1];
-        var isClosed = Math.Abs(last.X - first.X) < 0.01 && Math.Abs(last.Y - first.Y) < 0.01;
+        // Closed contour check (0.5mm tolerance)
+        var closeDist = Math.Sqrt((pts[^1].X - pts[0].X) * (pts[^1].X - pts[0].X) +
+                                  (pts[^1].Y - pts[0].Y) * (pts[^1].Y - pts[0].Y));
+        var isClosed = closeDist < 0.5;
 
-        // ── Compute outward normal at the start point ────────────────────────
-        // Direction from start to next point → tangent; rotate 90° outward
+        // ── Compute outward normal at start ──────────────────────────────────
         var tangX = pts[1].X - pts[0].X;
         var tangY = pts[1].Y - pts[0].Y;
         var tangLen = Math.Sqrt(tangX * tangX + tangY * tangY);
         if (tangLen < 0.001) tangLen = 1;
         tangX /= tangLen; tangY /= tangLen;
-        // Outward normal: for climb milling (CW around outer), outward is to the LEFT of travel
-        // For conventional (CCW), outward is to the RIGHT
         var normX = climb ? -tangY : tangY;
         var normY = climb ? tangX : -tangX;
 
-        // Lead-in start: offset from contour start along outward normal
-        var leadClearance = 0.5; // mm extra beyond the lead-in radius
+        // ── Lead-in collision check (Fix #1) ─────────────────────────────────
+        // If the lead-in point falls inside the contour (concave section),
+        // try the opposite direction or fall back to a straight approach.
+        var leadClearance = 0.5;
         var offDist = leadInRadius + leadClearance;
         var leadStartX = pts[0].X + normX * offDist;
         var leadStartY = pts[0].Y + normY * offDist;
 
-        // Arc centre: midpoint between lead-in start and contour start
+        // Simple inside check: does lead-in point cross any contour segment?
+        if (isClosed && PointInPolygon(pts, leadStartX, leadStartY))
+        {
+            // Try opposite side
+            leadStartX = pts[0].X - normX * offDist;
+            leadStartY = pts[0].Y - normY * offDist;
+            normX = -normX; normY = -normY;
+            // If still inside, fall back to straight approach (no arc)
+            if (PointInPolygon(pts, leadStartX, leadStartY))
+            {
+                leadStartX = pts[0].X + tangX * (-offDist); // approach from behind
+                leadStartY = pts[0].Y + tangY * (-offDist);
+            }
+        }
+
         var arcCX = pts[0].X + normX * (leadInRadius / 2.0);
         var arcCY = pts[0].Y + normY * (leadInRadius / 2.0);
-        // I/J: offset from lead-in start to arc centre
-        var leadI = arcCX - leadStartX;
-        var leadJ = arcCY - leadStartY;
         var leadFeed = (int)(feed * leadInFeedFrac);
+        var rampFeed = (int)(feed * 0.75); // 75% for ramp-up (Fix #4)
 
         var sb = new StringBuilder();
         sb.AppendLine($"; === Contour Milling Z={zCut:F3}  retract={zSafe:F3} lead-in={leadInRadius:F1} overlap={endOverlap:F1} ===");
 
-        // A. Spindle start + dwell
-        sb.AppendLine($"M3 S{rpm}");
-        if (dwellSec > 0)
-            sb.AppendLine($"G4 S{dwellSec:F1} ; spindle spin-up dwell {dwellSec:F1} s");
+        // A. Spindle start + dwell (Fix #2: only on first segment of this pass)
+        if (isFirstSegment)
+        {
+            sb.AppendLine($"M3 S{rpm}");
+            if (dwellSec > 0)
+                sb.AppendLine($"G4 S{dwellSec:F1} ; spindle spin-up dwell {dwellSec:F1} s");
+        }
 
-        // B. Lead-in: rapid to off-part position, plunge in free air, arc onto wall
+        // B. Lead-in
         sb.AppendLine($"G0 Z{zSafe:F3} F6000 ; retract to safe height");
-        sb.AppendLine($"; lead-in start (off part) X{leadStartX + dx:F3} Y{leadStartY + dy:F3}");
+        sb.AppendLine($"; lead-in start (off part)");
         sb.AppendLine($"G0 X{leadStartX + dx:F3} Y{leadStartY + dy:F3} F6000 ; travel to lead-in (off part)");
-        sb.AppendLine($"; plunge in air to Z{zCut:F3}");
         sb.AppendLine($"G1 Z{zCut:F3} F{feed * 0.3:F0} ; plunge in free air");
-        sb.AppendLine($"; lead-in arc (linearized — G2/G3 not supported on remapped axes)");
+        sb.AppendLine($"; lead-in arc (linearized)");
         sb.AppendLine($"G1 F{leadFeed}");
         LinearizeArc(sb, leadStartX, leadStartY, pts[0].X, pts[0].Y,
             arcCX, arcCY, climb, dx, dy);
 
-        // Contour
+        // Contour with feed ramp-up (Fix #4: gradual from 75% to 100% over first 5 moves)
         sb.AppendLine($"; contour");
-        sb.AppendLine($"G1 F{feed:F0}");
-        foreach (var pt in pts.Skip(1))
-            sb.AppendLine($"G1 X{pt.X + dx:F3} Y{pt.Y + dy:F3}");
+        var rampMoves = Math.Min(5, pts.Count - 1);
+        for (int i = 1; i < pts.Count; i++)
+        {
+            if (i <= rampMoves)
+            {
+                var f = rampFeed + (int)((feed - rampFeed) * i / rampMoves);
+                sb.AppendLine($"G1 X{pts[i].X + dx:F3} Y{pts[i].Y + dy:F3} F{f}");
+            }
+            else
+                sb.AppendLine($"G1 X{pts[i].X + dx:F3} Y{pts[i].Y + dy:F3}");
+        }
 
-        // C. End overlap: continue past the start point
+        // C. Overlap + lead-out
+        var exitIdx = pts.Count - 1;
         if (endOverlap > 0 && isClosed)
         {
             sb.AppendLine($"; end overlap {endOverlap:F1} mm");
             double overlapDist = 0;
             for (int i = 1; i < pts.Count && overlapDist < endOverlap; i++)
             {
-                var segDx2 = pts[i].X - pts[i - 1].X;
-                var segDy2 = pts[i].Y - pts[i - 1].Y;
-                var segLen2 = Math.Sqrt(segDx2 * segDx2 + segDy2 * segDy2);
-                overlapDist += segLen2;
+                var segLen = Math.Sqrt(
+                    (pts[i].X - pts[i-1].X) * (pts[i].X - pts[i-1].X) +
+                    (pts[i].Y - pts[i-1].Y) * (pts[i].Y - pts[i-1].Y));
+                overlapDist += segLen;
                 sb.AppendLine($"G1 X{pts[i].X + dx:F3} Y{pts[i].Y + dy:F3}");
+                exitIdx = i;
             }
         }
 
-        // Lead-out: arc away from wall, then retract in free air
-        // Compute outward normal at the current position (end of overlap or end of contour)
-        var exitPt = isClosed && endOverlap > 0
-            ? pts[Math.Min((int)(endOverlap / (tangLen > 0.001 ? tangLen : 1)) + 1, pts.Count - 1)]
-            : pts[^1];
-        // Use the same outward offset for lead-out
-        var leadOutX = exitPt.X + normX * offDist;
-        var leadOutY = exitPt.Y + normY * offDist;
-        var outI = (exitPt.X + normX * (leadInRadius / 2.0)) - exitPt.X;
-        var outJ = (exitPt.Y + normY * (leadInRadius / 2.0)) - exitPt.Y;
+        // Lead-out: compute normal at ACTUAL exit point
+        var exitPt = pts[exitIdx];
+        var prevPt = pts[Math.Max(0, exitIdx - 1)];
+        var exitTangX = exitPt.X - prevPt.X;
+        var exitTangY = exitPt.Y - prevPt.Y;
+        var exitTangLen = Math.Sqrt(exitTangX * exitTangX + exitTangY * exitTangY);
+        if (exitTangLen < 0.001) { exitTangX = tangX; exitTangY = tangY; }
+        else { exitTangX /= exitTangLen; exitTangY /= exitTangLen; }
+        var exitNormX = climb ? -exitTangY : exitTangY;
+        var exitNormY = climb ? exitTangX : -exitTangX;
 
-        sb.AppendLine($"; lead-out arc (linearized)");
-        sb.AppendLine($"G1 F{leadFeed}");
+        var leadOutX = exitPt.X + exitNormX * offDist;
+        var leadOutY = exitPt.Y + exitNormY * offDist;
+
+        if (isClosed)
         {
-            var outCX = exitPt.X + normX * (leadInRadius / 2.0);
-            var outCY = exitPt.Y + normY * (leadInRadius / 2.0);
+            // Closed contour: arc lead-out
+            sb.AppendLine($"; lead-out arc (linearized)");
+            sb.AppendLine($"G1 F{leadFeed}");
+            var outCX = exitPt.X + exitNormX * (leadInRadius / 2.0);
+            var outCY = exitPt.Y + exitNormY * (leadInRadius / 2.0);
             LinearizeArc(sb, exitPt.X, exitPt.Y, leadOutX, leadOutY,
-                outCX, outCY, !climb, dx, dy); // opposite direction for lead-out
+                outCX, outCY, !climb, dx, dy);
         }
+        else
+        {
+            // Open contour (Fix #3): straight lead-out along exit normal
+            sb.AppendLine($"; lead-out straight (open contour)");
+            sb.AppendLine($"G1 X{leadOutX + dx:F3} Y{leadOutY + dy:F3} F{leadFeed}");
+        }
+
         sb.AppendLine($"; retract (clear of part)");
         sb.AppendLine($"G0 Z{zSafe:F3} F6000 ; retract");
+
+        // M5 only on last segment (or always — spindle stays on between segments)
         sb.AppendLine("M5");
         sb.AppendLine($"; === End Contour Z={zCut:F3} ===");
         return sb.ToString();
+    }
+
+    /// <summary>Simple point-in-polygon test (ray casting) for lead-in collision check.</summary>
+    private static bool PointInPolygon(IList<(double X, double Y)> poly, double px, double py)
+    {
+        bool inside = false;
+        for (int i = 0, j = poly.Count - 1; i < poly.Count; j = i++)
+        {
+            if ((poly[i].Y > py) != (poly[j].Y > py) &&
+                px < (poly[j].X - poly[i].X) * (py - poly[i].Y) / (poly[j].Y - poly[i].Y) + poly[i].X)
+                inside = !inside;
+        }
+        return inside;
     }
 }
