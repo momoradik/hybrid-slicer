@@ -251,13 +251,9 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
         var resolvedEndZ   = cmd.SpindleEndZ ?? resolvedStartZ;
         var inv = System.Globalization.CultureInfo.InvariantCulture;
 
-        gcodeBuilder.AppendLine($"; Spindle start: X={cmd.SpindleStartX.ToString("F3", inv)} Y={cmd.SpindleStartY.ToString("F3", inv)} Z={resolvedStartZ.ToString("F3", inv)}");
-        gcodeBuilder.AppendLine($"; Spindle end  : X={resolvedEndX.ToString("F3", inv)} Y={resolvedEndY.ToString("F3", inv)} Z={resolvedEndZ.ToString("F3", inv)}");
-        gcodeBuilder.AppendLine();
-        gcodeBuilder.AppendLine("; === Preamble: move spindle to start position ===");
-        gcodeBuilder.AppendLine($"G0 Z{machine.SafeClearanceHeightMm.ToString("F3", inv)}");
-        gcodeBuilder.AppendLine($"G0 X{cmd.SpindleStartX.ToString("F3", inv)} Y{cmd.SpindleStartY.ToString("F3", inv)}");
-        gcodeBuilder.AppendLine($"G0 Z{resolvedStartZ.ToString("F3", inv)}");
+        // No preamble move — each contour pass handles its own safe retract,
+        // travel to lead-in position, and plunge. A preamble to (0,0) would cause
+        // an unnecessary trip to the machine origin before the first cut.
         gcodeBuilder.AppendLine();
 
         // ── Compute which layers to machine ───────────────────────────────────

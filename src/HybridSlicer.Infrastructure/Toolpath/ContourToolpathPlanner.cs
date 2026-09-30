@@ -506,6 +506,50 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
         return hull.IsValid ? hull : null;
     }
 
+    // ── Arc linearization ─────────────────────────────────────────────────────
+    // Converts an arc into short G1 line segments. Used instead of G2/G3 because
+    // RepRapFirmware does not support arcs on remapped axes (X/V plane).
+
+    private static void LinearizeArc(
+        StringBuilder sb,
+        double startX, double startY,
+        double endX, double endY,
+        double centerX, double centerY,
+        bool clockwise,
+        double dx, double dy,
+        int segments = 12)
+    {
+        var r = Math.Sqrt((startX - centerX) * (startX - centerX) +
+                          (startY - centerY) * (startY - centerY));
+        if (r < 0.001) { sb.AppendLine($"G1 X{endX + dx:F3} Y{endY + dy:F3}"); return; }
+
+        var startAngle = Math.Atan2(startY - centerY, startX - centerX);
+        var endAngle   = Math.Atan2(endY - centerY,   endX - centerX);
+
+        // Adjust sweep direction
+        var sweep = endAngle - startAngle;
+        if (clockwise)
+        {
+            if (sweep > 0) sweep -= 2 * Math.PI;
+            if (sweep > -0.001) sweep = -2 * Math.PI; // full circle fallback
+        }
+        else
+        {
+            if (sweep < 0) sweep += 2 * Math.PI;
+            if (sweep < 0.001) sweep = 2 * Math.PI;
+        }
+
+        for (int i = 1; i <= segments; i++)
+        {
+            var t = startAngle + sweep * i / segments;
+            var px = centerX + r * Math.Cos(t);
+            var py = centerY + r * Math.Sin(t);
+            sb.AppendLine($"G1 X{px + dx:F3} Y{py + dy:F3}");
+        }
+        // Ensure we end exactly at the target
+        sb.AppendLine($"G1 X{endX + dx:F3} Y{endY + dy:F3}");
+    }
+
     // ── G-code builder ────────────────────────────────────────────────────────
 
     private static string BuildGCode(
@@ -584,10 +628,6 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
         // I/J: offset from lead-in start to arc centre
         var leadI = arcCX - leadStartX;
         var leadJ = arcCY - leadStartY;
-        // Arc command: G2 for CW, G3 for CCW (climb=CW outer, conventional=CCW)
-        var arcCmd = climb ? "G2" : "G3";
-        var arcCmdOut = climb ? "G3" : "G2"; // lead-out goes the other way
-
         var leadFeed = (int)(feed * leadInFeedFrac);
 
         var sb = new StringBuilder();
@@ -604,8 +644,10 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
         sb.AppendLine($"G0 X{leadStartX + dx:F3} Y{leadStartY + dy:F3} F6000 ; travel to lead-in (off part)");
         sb.AppendLine($"; plunge in air to Z{zCut:F3}");
         sb.AppendLine($"G1 Z{zCut:F3} F{feed * 0.3:F0} ; plunge in free air");
-        sb.AppendLine($"; lead-in arc");
-        sb.AppendLine($"{arcCmd} X{pts[0].X + dx:F3} Y{pts[0].Y + dy:F3} I{leadI:F3} J{leadJ:F3} F{leadFeed} ; lead-in arc");
+        sb.AppendLine($"; lead-in arc (linearized — G2/G3 not supported on remapped axes)");
+        sb.AppendLine($"G1 F{leadFeed}");
+        LinearizeArc(sb, leadStartX, leadStartY, pts[0].X, pts[0].Y,
+            arcCX, arcCY, climb, dx, dy);
 
         // Contour
         sb.AppendLine($"; contour");
@@ -639,8 +681,14 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
         var outI = (exitPt.X + normX * (leadInRadius / 2.0)) - exitPt.X;
         var outJ = (exitPt.Y + normY * (leadInRadius / 2.0)) - exitPt.Y;
 
-        sb.AppendLine($"; lead-out arc");
-        sb.AppendLine($"{arcCmdOut} X{leadOutX + dx:F3} Y{leadOutY + dy:F3} I{outI:F3} J{outJ:F3} F{leadFeed} ; lead-out arc");
+        sb.AppendLine($"; lead-out arc (linearized)");
+        sb.AppendLine($"G1 F{leadFeed}");
+        {
+            var outCX = exitPt.X + normX * (leadInRadius / 2.0);
+            var outCY = exitPt.Y + normY * (leadInRadius / 2.0);
+            LinearizeArc(sb, exitPt.X, exitPt.Y, leadOutX, leadOutY,
+                outCX, outCY, !climb, dx, dy); // opposite direction for lead-out
+        }
         sb.AppendLine($"; retract (clear of part)");
         sb.AppendLine($"G0 Z{zSafe:F3} F6000 ; retract");
         sb.AppendLine("M5");
