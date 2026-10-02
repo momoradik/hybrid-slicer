@@ -90,7 +90,7 @@ static class Program
             CreateNoWindow   = true,
         })!;
 
-        var networkIp = GetLocalIp();
+        var networkIp = LauncherForm.LoadIpSetting() ?? GetLocalIp();
         using var form = new LauncherForm(server, networkIp, curaExe);
         Application.Run(form);
 

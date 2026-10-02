@@ -23,6 +23,10 @@ public sealed class LauncherForm : Form
     private string _serverStatus = "starting";
     private int _port = 8080;
 
+    private static readonly string SettingsPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "HybridSlicer", "launcher-settings.json");
+
     public LauncherForm(Process server, string networkIp, string? curaPath)
     {
         _server    = server;
@@ -166,6 +170,7 @@ public sealed class LauncherForm : Form
                 case "set-ip":
                     var newIp = msg.GetProperty("ip").GetString()!;
                     _networkIp = newIp;
+                    SaveIpSetting(newIp);
                     var newUrl = $"http://{_networkIp}:{_port}";
                     ExecuteScript($"ipChanged('{_networkIp}', '{newUrl}')");
                     break;
@@ -278,6 +283,28 @@ public sealed class LauncherForm : Form
                    && connectTask.IsCompletedSuccessfully;
         }
         catch { return false; }
+    }
+
+    private static void SaveIpSetting(string ip)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(SettingsPath)!;
+            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new { ip }));
+        }
+        catch { /* best-effort */ }
+    }
+
+    public static string? LoadIpSetting()
+    {
+        try
+        {
+            if (!File.Exists(SettingsPath)) return null;
+            using var doc = JsonDocument.Parse(File.ReadAllText(SettingsPath));
+            return doc.RootElement.GetProperty("ip").GetString();
+        }
+        catch { return null; }
     }
 
     private static void OpenUrl(string url)
