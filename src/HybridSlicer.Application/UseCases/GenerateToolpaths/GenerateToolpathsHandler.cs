@@ -449,7 +449,28 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
             // Track the top-of-part Z from the previous machining pass.
             // The tool tip must go to the BOTTOM of the band (previousTopZ - tipOverlap),
             // not the top, so the flutes machine the full band height.
+            //
+            // When SkipMachiningLayers > 0, initialise previousTopZ to the Z height of
+            // the last skipped layer so the first band doesn't cut into the skip zone.
             double previousTopZ = 0.0;
+            int skipBoundaryLayer = 0; // 1-based layer number of the last skipped layer (0 = no skip)
+            if (cmd.SkipMachiningLayers > 0)
+            {
+                var skippedPartCount = 0;
+                for (var li = 1; li <= job.TotalPrintLayers!.Value; li++)
+                {
+                    var ci = li - 1;
+                    if (!parsed.Layers.TryGetValue(ci, out var skipLd2)) continue;
+                    if (skipLd2.OuterWallPaths.Count == 0 && skipLd2.InnerWallPaths.Count == 0) continue;
+                    skippedPartCount++;
+                    if (skippedPartCount == cmd.SkipMachiningLayers)
+                    {
+                        previousTopZ = skipLd2.ZHeightMm;
+                        skipBoundaryLayer = li;
+                        break;
+                    }
+                }
+            }
 
             // Build a map from 1-based layer number to the ACTUAL Cura Z height,
             // so we never compute layer*h (which is wrong when layer 0 is at Z=h, not Z=0).
@@ -481,8 +502,13 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     // Walk backwards through layerActualZ to find it.
                     var overlapTarget = layer - (int)Math.Round((partTopZ - previousTopZ) / h) - reK;
                     overlapTarget = Math.Max(1, overlapTarget); // can't go below layer 1
+                    if (skipBoundaryLayer > 0)
+                        overlapTarget = Math.Max(skipBoundaryLayer + 1, overlapTarget); // don't re-machine into skip zone
                     bandBottomZ = layerActualZ.GetValueOrDefault(overlapTarget, Math.Max(overlapTarget * h, 0));
-                    bandBottomZ = Math.Max(bandBottomZ - h, 0); // bottom of that layer, not top
+                    bandBottomZ = Math.Max(bandBottomZ, 0);
+                    // Re-machine should only LOWER the band bottom, never raise it.
+                    // On the first event the overlap target may land above previousTopZ — keep the lower value.
+                    bandBottomZ = Math.Min(bandBottomZ, previousTopZ);
                 }
 
                 // Tool tip goes to the bottom of the band.

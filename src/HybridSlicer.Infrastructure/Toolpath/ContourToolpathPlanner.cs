@@ -623,8 +623,11 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
             }
         }
 
-        var arcCX = pts[0].X + normX * (leadInRadius / 2.0);
-        var arcCY = pts[0].Y + normY * (leadInRadius / 2.0);
+        // Arc center at midpoint between lead-in start and contour point.
+        // Using offDist/2 (not leadInRadius/2) so center-to-start and center-to-end
+        // radii match — prevents the arc from overshooting into the part.
+        var arcCX = pts[0].X + normX * (offDist / 2.0);
+        var arcCY = pts[0].Y + normY * (offDist / 2.0);
         var leadFeed = (int)(feed * leadInFeedFrac);
         var rampFeed = (int)(feed * 0.75); // 75% for ramp-up (Fix #4)
 
@@ -699,8 +702,8 @@ public sealed class ContourToolpathPlanner : IToolpathPlanner
             // Closed contour: arc lead-out
             sb.AppendLine($"; lead-out arc (linearized)");
             sb.AppendLine($"G1 F{leadFeed}");
-            var outCX = exitPt.X + exitNormX * (leadInRadius / 2.0);
-            var outCY = exitPt.Y + exitNormY * (leadInRadius / 2.0);
+            var outCX = exitPt.X + exitNormX * (offDist / 2.0);
+            var outCY = exitPt.Y + exitNormY * (offDist / 2.0);
             LinearizeArc(sb, exitPt.X, exitPt.Y, leadOutX, leadOutY,
                 outCX, outCY, !climb, dx, dy);
         }
