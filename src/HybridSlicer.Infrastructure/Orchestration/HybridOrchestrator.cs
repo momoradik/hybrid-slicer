@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using HybridSlicer.Application.Interfaces;
+using HybridSlicer.Domain;
 using HybridSlicer.Domain.Entities;
 using HybridSlicer.Domain.Enums;
 using Microsoft.Extensions.Logging;
@@ -43,7 +44,7 @@ public sealed partial class HybridOrchestrator : IHybridOrchestrator
 
         var output = new StringBuilder();
         output.AppendLine("; ============================================================");
-        output.AppendLine("; HybridSlicer — Hybrid Manufacturing G-code");
+        output.AppendLine($"; HybridSlicer v{Domain.AppVersion.Current} — Hybrid Manufacturing G-code");
         output.AppendLine($"; Generated : {DateTime.UtcNow:O}");
         output.AppendLine($"; Total layers     : {request.TotalPrintLayers}");
         output.AppendLine($"; Machine every N  : {request.MachineEveryNLayers}");

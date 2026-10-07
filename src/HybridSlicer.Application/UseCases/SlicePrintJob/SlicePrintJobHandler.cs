@@ -1,6 +1,7 @@
 using System.Text;
 using HybridSlicer.Application.Interfaces;
 using HybridSlicer.Application.Interfaces.Repositories;
+using HybridSlicer.Domain;
 using HybridSlicer.Domain.Entities;
 using HybridSlicer.Domain.Enums;
 using HybridSlicer.Domain.Exceptions;
@@ -212,6 +213,7 @@ public sealed class SlicePrintJobHandler : IRequestHandler<SlicePrintJobCommand,
         }
 
         // Insert user-selected startup commands
+        sb.AppendLine($"; HybridSlicer v{Domain.AppVersion.Current}");
         sb.AppendLine("; === HybridSlicer Startup ===");
         if (homing)    sb.AppendLine("G28          ; home all axes");
         if (levelling) sb.AppendLine("G29          ; bed levelling");

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using HybridSlicer.Application.Interfaces;
 using HybridSlicer.Application.Interfaces.Repositories;
+using HybridSlicer.Domain;
 using HybridSlicer.Domain.Enums;
 using HybridSlicer.Domain.Exceptions;
 using HybridSlicer.Domain.ValueObjects;
@@ -229,6 +230,7 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
         var machinedLayers      = new List<int>();
         var allUnmachinableRegions = new List<UnmachinableRegion>();
         var gcodeBuilder        = new StringBuilder();
+        gcodeBuilder.AppendLine($"; HybridSlicer v{Domain.AppVersion.Current}");
         gcodeBuilder.AppendLine($"; CNC Toolpath G-code — Job: {job.Name}");
         var spindleRpm = cmd.SpindleRpmOverride ?? tool.RecommendedRpm;
         gcodeBuilder.AppendLine($"; Tool     : {tool.Name}  Ø{tool.DiameterMm} mm  Flute: {tool.FluteLengthMm} mm  Tool length: {tool.ToolLengthMm} mm  Feed: {tool.RecommendedFeedMmPerMin} mm/min  RPM: {spindleRpm}{(cmd.SpindleRpmOverride.HasValue ? $" (override — tool default: {tool.RecommendedRpm})" : "")}");
@@ -527,8 +529,10 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                 if (reK > 0 && prevPassTopLayer > 0)
                 {
                     bandBottomLayer = prevPassTopLayer - reK;
-                    // Clamp: never go below skip boundary + 1 or below layer 1
-                    var minLayer = skipBoundaryLayer > 0 ? skipBoundaryLayer + 1 : 1;
+                    // Clamp: never go below skip boundary or below layer 1.
+                    // The skip boundary IS the bottom of the first band — those layers
+                    // were printed but never machined, so their surface must be cut.
+                    var minLayer = skipBoundaryLayer > 0 ? skipBoundaryLayer : 1;
                     bandBottomLayer = Math.Max(bandBottomLayer, minLayer);
                 }
                 // On the very first machining event, bandBottomLayer is the skip boundary
@@ -705,7 +709,7 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                         if (!rResult.IsEmpty)
                         {
                             reMachineGCode.AppendLine(
-                                $"; ── Re-machine layer {rLayer} (;LAYER:{rCuraIdx}) Z={rEffZ:F3} ──");
+                                $"; ── Re-machine L{rLayer} (;LAYER:{rCuraIdx}) Z={rEffZ:F3} ──");
                             reMachineGCode.AppendLine(rResult.GCode.TrimEnd());
                             reMachineGCode.AppendLine();
                         }
