@@ -56,7 +56,10 @@ public sealed record GenerateToolpathsCommand(
     /// <summary>Number of already-machined layers below each band to re-cut.
     /// Compensates for ooze/sag on the first layers printed after a CNC pass.
     /// 0 = current behaviour (no overlap). E.g. 2 with frequency 5 at layer 15 → cuts layers 9–15.</summary>
-    int RemachineLowerLayers = 0) : IRequest<GenerateToolpathsResult>;
+    int RemachineLowerLayers = 0,
+    /// <summary>Number of contour passes per machining event. 1 = single pass (default).
+    /// Higher values repeat the same contour to improve surface finish.</summary>
+    int MachiningPasses = 1) : IRequest<GenerateToolpathsResult>;
 
 public sealed record GenerateToolpathsResult(
     Guid                 JobId,

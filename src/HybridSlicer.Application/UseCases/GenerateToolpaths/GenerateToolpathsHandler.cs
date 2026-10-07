@@ -713,8 +713,14 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     continue;
                 }
 
-                var combinedGCode = toolpath.GCode
+                // Repeat the contour pass N times for better surface finish
+                var passes = Math.Max(1, cmd.MachiningPasses);
+                var singlePass = toolpath.GCode
                     + (innerToolpath is { IsEmpty: false } ? "\n" + innerToolpath.GCode : string.Empty);
+                var combinedGCode = passes == 1
+                    ? singlePass
+                    : string.Join("\n", Enumerable.Range(0, passes)
+                        .Select(p => $"; pass {p + 1}/{passes}\n" + singlePass));
 
                 var allBounds = toolpath.ToolpathBounds
                     .Concat(innerToolpath?.ToolpathBounds ?? [])

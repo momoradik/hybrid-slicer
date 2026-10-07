@@ -181,6 +181,7 @@ interface SavedState {
   machineEveryN: number
   skipMachiningLayers: number  // skip first N layers before machining starts
   remachineLowerLayers: number // re-cut N already-machined layers below each band
+  machiningPasses: number      // number of contour passes per machining event
   machineInnerWalls: boolean
   avoidSupports: boolean
   supportClearanceMm: number
@@ -195,7 +196,7 @@ const _initState: SavedState = {
   supportPlacement: 'everywhere', infillPattern: 'grid', infillDensity: 15,
   supportInfillPattern: 'grid', supportInfillDensity: 15, adhesionType: 'none',
   gcodeHoming: true, gcodeLevelling: false, applyCustomGCodeBlocks: true,
-  cncToolId: '', machineEveryN: 10, skipMachiningLayers: 0, remachineLowerLayers: 0, machineInnerWalls: false, avoidSupports: false,
+  cncToolId: '', machineEveryN: 10, skipMachiningLayers: 0, remachineLowerLayers: 0, machiningPasses: 1, machineInnerWalls: false, avoidSupports: false,
   supportClearanceMm: 2.0, autoMachiningFrequency: false, zSafetyOffsetMm: 0,
   spindleRpmOverride: null,
 }
@@ -251,6 +252,7 @@ export default function StlImport() {
   const [machineEveryN, setMachineEveryN]               = useState(() => _saved.machineEveryN)
   const [skipMachiningLayers, setSkipMachiningLayers]   = useState(() => _saved.skipMachiningLayers)
   const [remachineLowerLayers, setRemachineLowerLayers] = useState(() => _saved.remachineLowerLayers)
+  const [machiningPasses, setMachiningPasses]           = useState(() => _saved.machiningPasses)
   const [machineInnerWalls, setMachineInnerWalls]       = useState(() => _saved.machineInnerWalls)
   const [avoidSupports, setAvoidSupports]               = useState(() => _saved.avoidSupports)
   const [supportClearanceMm, setSupportClearanceMm]     = useState(() => _saved.supportClearanceMm)
@@ -340,6 +342,7 @@ export default function StlImport() {
   useEffect(() => { _saved.machineEveryN = machineEveryN }, [machineEveryN])
   useEffect(() => { _saved.skipMachiningLayers = skipMachiningLayers }, [skipMachiningLayers])
   useEffect(() => { _saved.remachineLowerLayers = remachineLowerLayers }, [remachineLowerLayers])
+  useEffect(() => { _saved.machiningPasses = machiningPasses }, [machiningPasses])
   useEffect(() => { _saved.machineInnerWalls = machineInnerWalls }, [machineInnerWalls])
   useEffect(() => { _saved.avoidSupports = avoidSupports }, [avoidSupports])
   useEffect(() => { _saved.supportClearanceMm = supportClearanceMm }, [supportClearanceMm])
@@ -657,7 +660,7 @@ export default function StlImport() {
               jobIds[0], cncToolId, machineEveryN,
               machineInnerWalls, avoidSupports, supportClearanceMm,
               autoMachiningFrequency, zSafetyOffsetMm, spindleRpmOverride,
-              0, 0, null, 0, 0, null, skipMachiningLayers, remachineLowerLayers,
+              0, 0, null, 0, 0, null, skipMachiningLayers, remachineLowerLayers, machiningPasses,
             )
             await jobsApi.planHybrid(jobIds[0], machineEveryN)
           }
@@ -705,7 +708,7 @@ export default function StlImport() {
             jobId, cncToolId, machineEveryN,
             machineInnerWalls, avoidSupports, supportClearanceMm,
             autoMachiningFrequency, zSafetyOffsetMm, spindleRpmOverride,
-            0, 0, null, 0, 0, null, skipMachiningLayers,
+            0, 0, null, 0, 0, null, skipMachiningLayers, remachineLowerLayers, machiningPasses,
           )
           await jobsApi.planHybrid(jobId, machineEveryN)
         }
@@ -1420,6 +1423,18 @@ export default function StlImport() {
                 <p className="text-[10px] text-gray-600 mt-0.5">
                   Re-cuts N already-machined layers below each band to clean ooze/sag.
                   E.g. freq=5, layer 15: 0 → layers 11–15, 2 → layers 9–15.
+                </p>
+              </Field>
+
+              <Field label="Machining passes">
+                <div className="flex items-center gap-2">
+                  <input type="number" min={1} max={20} step={1} value={machiningPasses}
+                    onChange={e => setMachiningPasses(Math.max(1, Math.min(20, Math.round(+e.target.value) || 1)))}
+                    className="input w-20 text-center" />
+                  <span className="text-xs text-gray-500">{machiningPasses === 1 ? 'single pass' : `${machiningPasses} passes`}</span>
+                </div>
+                <p className="text-[10px] text-gray-600 mt-0.5">
+                  Repeats the contour cut at each machining event for better surface finish.
                 </p>
               </Field>
 
