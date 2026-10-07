@@ -1,6 +1,7 @@
 using HybridSlicer.Application.Common;
 using HybridSlicer.Application.Interfaces;
 using HybridSlicer.Application.Interfaces.Repositories;
+using HybridSlicer.Infrastructure.AlignMesh;
 using HybridSlicer.Infrastructure.Machine;
 using HybridSlicer.Infrastructure.Orchestration;
 using HybridSlicer.Infrastructure.Persistence;
@@ -27,6 +28,9 @@ public static class ServiceExtensions
         // ── Options ──────────────────────────────────────────────────────────
         services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.Section));
         services.Configure<CuraEngineOptions>(configuration.GetSection(CuraEngineOptions.Section));
+        services.Configure<AlignMeshOptions>(configuration.GetSection(AlignMeshOptions.Section));
+        services.AddSingleton<AlignMeshProcessManager>();
+        services.AddHostedService(sp => sp.GetRequiredService<AlignMeshProcessManager>());
 
         // Ensure storage root directory exists
         var configuredRoot = configuration[$"{StorageOptions.Section}:Root"];
@@ -59,6 +63,7 @@ public static class ServiceExtensions
         // ── Domain Services ──────────────────────────────────────────────────
         services.AddScoped<ISlicingEngine,      CuraEngineAdapter>();
         services.AddScoped<IToolpathPlanner,    ContourToolpathPlanner>();
+        services.AddScoped<ISurfaceMachiningPlanner, DeviationMachiningPlanner>();
         services.AddScoped<ISafetyValidator,    CollisionSafetyValidator>();
         services.AddScoped<IHybridOrchestrator, HybridOrchestrator>();
         services.AddSingleton<ICuraGCodeParser, CuraGCodeParser>();   // stateless, reusable

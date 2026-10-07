@@ -618,11 +618,89 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     continue;
                 }
 
-                // Generate CNC toolpath from EXTERIOR walls (always).
+                // ── Re-machine lower layers: generate contour passes at each lower Z ──
+                // When reK > 0, the band extends below the previous pass. We must
+                // generate a separate contour at each intermediate layer's Z height
+                // using that layer's own wall paths from Cura — not just one pass at
+                // the band bottom using the top layer's contour shape.
+                var reMachineGCode = new StringBuilder();
+                if (reK > 0 && bandBottomZ < previousTopZ)
+                {
+                    // Walk from the band bottom layer up to (but not including) the current layer.
+                    // Each layer gets its own contour pass at its own Z, with its own wall paths.
+                    var reBandBottom = Math.Max(1,
+                        layer - (int)Math.Round((partTopZ - bandBottomZ) / h));
+
+                    for (var rLayer = reBandBottom; rLayer < layer; rLayer++)
+                    {
+                        var rCuraIdx = rLayer - 1;
+                        if (!parsed.Layers.TryGetValue(rCuraIdx, out var rLayerData))
+                            continue;
+                        if (rLayerData.OuterWallPaths.Count == 0)
+                            continue;
+
+                        var rZ = layerActualZ.GetValueOrDefault(rLayer, rLayer * h);
+                        var rTipZ = Math.Max(rZ - effectiveTipOverlap, cmd.BedClearanceMm);
+                        var rEffZ = rTipZ + cmd.ZSafetyOffsetMm;
+
+                        // Split exterior vs hole paths (same logic as above)
+                        var rExterior = new List<IReadOnlyList<(double X, double Y)>>();
+                        foreach (var p in rLayerData.OuterWallPaths)
+                        {
+                            if (p.Count < 3) { rExterior.Add(p); continue; }
+                            var depth = 0;
+                            foreach (var q in rLayerData.OuterWallPaths)
+                            {
+                                if (ReferenceEquals(q, p)) continue;
+                                if (PointInPolygon(q, p[0].X, p[0].Y)) depth++;
+                            }
+                            if ((depth & 1) == 0) rExterior.Add(p);
+                        }
+                        if (rExterior.Count == 0) continue;
+
+                        var rSupportPaths = (cmd.AvoidSupports && rLayerData.SupportPaths.Count > 0)
+                            ? rLayerData.SupportPaths : null;
+
+                        var rReq = new WallPathsRequest(
+                            WallPaths:              rExterior,
+                            ZHeightMm:              rEffZ,
+                            ToolDiameterMm:         tool.DiameterMm,
+                            NozzleDiameterMm:       profile.LineWidthMm,
+                            FeedRateMmPerMin:       tool.RecommendedFeedMmPerMin,
+                            SpindleRpm:             spindleRpm,
+                            MachineOffset:          cncOffset,
+                            SafeClearanceHeightMm:  machine.SafeClearanceHeightMm,
+                            IsOuterWall:            true,
+                            ClimbMilling:           true,
+                            PartTopZMm:             partTopZ + cncOffset.Z,
+                            SupportPaths:           rSupportPaths,
+                            SupportClearanceMm:     cmd.SupportClearanceMm,
+                            PassIndex:              machinedLayers.Count);
+
+                        var rResult = await _planner.PlanFromWallPathsAsync(rReq, ct);
+                        if (!rResult.IsEmpty)
+                        {
+                            reMachineGCode.AppendLine(
+                                $"; ── Re-machine layer {rLayer} (;LAYER:{rCuraIdx}) Z={rEffZ:F3} ──");
+                            reMachineGCode.AppendLine(rResult.GCode.TrimEnd());
+                            reMachineGCode.AppendLine();
+                        }
+                    }
+                }
+
+                // Generate CNC toolpath from EXTERIOR walls at the CURRENT layer.
+                // When re-machining, the lower layers are already handled above —
+                // the main pass cuts at the CURRENT layer's Z, not the band bottom.
+                var mainPassZ = effectiveZ;
+                if (reMachineGCode.Length > 0)
+                {
+                    var curTipZ = Math.Max(partTopZ - effectiveTipOverlap, cmd.BedClearanceMm);
+                    mainPassZ = curTipZ + cmd.ZSafetyOffsetMm;
+                }
                 var passIdx = machinedLayers.Count; // 0-based pass index for start-point rotation
                 var outerRequest = new WallPathsRequest(
                     WallPaths:              exteriorPaths,
-                    ZHeightMm:              effectiveZ,
+                    ZHeightMm:              mainPassZ,
                     ToolDiameterMm:         tool.DiameterMm,
                     NozzleDiameterMm:       profile.LineWidthMm,
                     FeedRateMmPerMin:       tool.RecommendedFeedMmPerMin,
@@ -672,7 +750,8 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                         allUnmachinableRegions.AddRange(innerToolpath.UnmachinableRegions);
                 }
 
-                if (toolpath.IsEmpty && (innerToolpath is null || innerToolpath.IsEmpty))
+                if (toolpath.IsEmpty && (innerToolpath is null || innerToolpath.IsEmpty)
+                    && reMachineGCode.Length == 0)
                 {
                     gcodeBuilder.AppendLine($"; Layer {layer} (Z={zHeight:F3} mm) — planner returned empty, skipped");
                     gcodeBuilder.AppendLine();
@@ -681,8 +760,9 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                     continue;
                 }
 
-                // Safety validation
-                var combinedGCode = toolpath.GCode
+                // Safety validation — include re-machine G-code in the combined output
+                var combinedGCode = reMachineGCode.ToString()
+                    + toolpath.GCode
                     + (innerToolpath is { IsEmpty: false } ? "\n" + innerToolpath.GCode : string.Empty);
 
                 var allBounds = toolpath.ToolpathBounds

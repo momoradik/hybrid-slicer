@@ -11,6 +11,7 @@ import HybridPreview from './pages/HybridPreview'
 import CustomGCode from './pages/CustomGCode'
 import Calibration from './pages/Calibration'
 import Printer from './pages/Printer'
+import CMM from './pages/CMM'
 // PelletCalibration is now a subtab inside Calibration
 import BrandingPage from './pages/BrandingPage'
 import GCodePage from './pages/GCodePage'
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="custom-gcode"       element={<CustomGCode />} />
             <Route path="calibration"        element={<Calibration />} />
             <Route path="printer"           element={<Printer />} />
+            <Route path="cmm"              element={<CMM />} />
             {/* pellet-calibration redirects to calibration tab */}
             <Route path="pellet-calibration" element={<Navigate to="/calibration" replace />} />
             <Route path="jobs/:id/gcode"     element={<GCodePage />} />

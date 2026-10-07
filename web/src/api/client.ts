@@ -161,6 +161,39 @@ export const brandingApi = {
   update: (data: BrandingSettings) => http.put<BrandingSettings>('/branding', data).then(r => r.data),
 }
 
+// ── Surface Machining ────────────────────────────────────────────────────
+export interface SurfaceMachiningRequest {
+  pointPositions: number[]
+  pointDeviations: number[]
+  transformMatrix: number[]
+  machineProfileId: string
+  cncToolId: string
+  deviationThreshold: number
+  stepoverPercent: number
+  maxDepthPerPass: number
+  finishAllowance: number
+  patternType: string
+  climbMilling: boolean
+  spindleRpmOverride: number
+  feedRateOverride: number
+}
+
+export interface SurfaceMachiningResult {
+  gCode: string
+  isEmpty: boolean
+  totalPasses: number
+  cuttingMoves: number
+  estimatedTimeSec: number
+  machinedRegions: { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number; maxDeviation: number }[]
+  skippedRegions: { minX: number; minY: number; maxX: number; maxY: number; reason: string }[]
+  warnings: string[]
+}
+
+export const surfaceMachiningApi = {
+  generate: (data: SurfaceMachiningRequest) =>
+    http.post<SurfaceMachiningResult>('/surface-machining/generate', data).then(r => r.data),
+}
+
 // ── Materials ─────────────────────────────────────────────────────────────
 export const materialsApi = {
   getAll: () => http.get<Material[]>('/materials').then(r => r.data),

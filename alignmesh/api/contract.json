@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "alignmesh-api-contract-v0.2.0",
+  "title": "alignmesh API Contract",
+  "description": "Single source of truth for the alignmesh core ↔ frontend API. All physical quantities state their unit explicitly. Transform convention: 4x4 row-major, column-vector (point' = T*point), measured→nominal frame, right-handed.",
+
+  "endpoints": {
+    "GET /health": {
+      "response": { "$ref": "#/$defs/HealthResponse" }
+    },
+    "GET /version": {
+      "response": { "$ref": "#/$defs/VersionResponse" }
+    },
+    "POST /inspect": {
+      "request": { "$ref": "#/$defs/InspectRequest" },
+      "response": { "$ref": "#/$defs/InspectResponse" }
+    }
+  },
+
+  "$defs": {
+    "HealthResponse": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "string", "enum": ["ok"] }
+      }
+    },
+
+    "VersionResponse": {
+      "type": "object",
+      "required": ["version", "compiler", "cpu", "fp_flags"],
+      "properties": {
+        "version":  { "type": "string", "description": "Core version string" },
+        "compiler": { "type": "string", "description": "Compiler ID and version" },
+        "cpu":      { "type": "string", "description": "CPU brand string" },
+        "fp_flags": { "type": "string", "description": "Floating-point determinism flags" }
+      }
+    },
+
+    "InspectRequest": {
+      "type": "object",
+      "required": ["reference", "measured", "tolerance"],
+      "properties": {
+        "reference": { "type": "string", "description": "Filesystem path to reference part" },
+        "measured":  { "type": "string", "description": "Filesystem path to measured part" },
+        "tolerance": { "type": "number", "description": "Tolerance", "unit": "mm" }
+      }
+    },
+
+    "Verdict": {
+      "type": "string",
+      "enum": ["PASS", "WARNING", "FAIL", "INVALID"],
+      "description": "ISO 14253-1 conformance decision. PASS=proven conformant, WARNING=inside tolerance but within U of limit (ambiguous), FAIL=proven non-conformant, INVALID=measurement inadequacy (gate failure)"
+    },
+
+    "RpsConformance": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "UNDECIDED"],
+      "description": "ISO 14253-1 bilateral three-zone conformance per RPS direction. PASS=within acceptance zone, FAIL=outside rejection zone, UNDECIDED=in guard band (ambiguous due to measurement uncertainty)"
+    },
+
+    "ProjectionStatus": {
+      "type": "string",
+      "enum": ["OK", "INSUFFICIENT_DATA", "AMBIGUOUS_PATCH", "GRAZING", "MULTIPLE_INTERSECTION", "NO_NORMAL"],
+      "description": "Status of projecting a nominal RPS point onto the scanned surface. Any non-OK status excludes the point from alignment and propagates to the DOF report."
+    },
+
+    "RpsConstraintDirection": {
+      "type": "object",
+      "required": ["direction", "weight"],
+      "description": "A single directional constraint for an RPS point. The deviation that matters is the component of (measured − nominal) along direction only.",
+      "properties": {
+        "direction":    { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3, "description": "Unit direction vector in reference frame (eₓ/e_y/e_z for axis-lock, or surface normal)", "unit": "dimensionless" },
+        "weight":       { "type": "number",  "description": "Priority weight (>0). Higher = more important in over-determined solve.", "unit": "dimensionless" },
+        "tolerance_lower": { "type": "number", "description": "Bilateral tolerance lower limit (negative = material side)", "unit": "mm" },
+        "tolerance_upper": { "type": "number", "description": "Bilateral tolerance upper limit (positive = free side)", "unit": "mm" }
+      }
+    },
+
+    "RpsPoint": {
+      "type": "object",
+      "required": ["id", "nominal_position", "constraint_directions", "source"],
+      "description": "A single RPS constraint point specification. User-defined on the reference part.",
+      "properties": {
+        "id":                    { "type": "string",  "description": "Stable auditable identifier for this point" },
+        "nominal_position":      { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3, "description": "Position in reference frame", "unit": "mm" },
+        "constraint_directions": { "type": "array", "items": { "$ref": "#/$defs/RpsConstraintDirection" }, "minItems": 1, "maxItems": 3, "description": "One or more directional constraints (axis-lock and/or surface-normal)" },
+        "source":                { "type": "string",  "enum": ["USER_AXIS_LOCK", "SURFACE_NORMAL"], "description": "How the constraint direction(s) were determined" }
+      }
+    },
+
+    "RpsPointResult": {
+      "type": "object",
+      "required": ["id", "measured_position", "projection_status", "deviation_per_direction", "conformance_per_direction"],
+      "description": "Per-point result from the RPS alignment.",
+      "properties": {
+        "id":                       { "type": "string",  "description": "Matches RpsPoint.id" },
+        "measured_position":        { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3, "description": "Projected position on scanned surface (after pre-alignment)", "unit": "mm" },
+        "projection_status":        { "$ref": "#/$defs/ProjectionStatus" },
+        "deviation_per_direction":   { "type": "array", "items": { "type": "number" }, "description": "Signed deviation along each constraint direction (same order as constraint_directions)", "unit": "mm" },
+        "conformance_per_direction": { "type": "array", "items": { "$ref": "#/$defs/RpsConformance" }, "description": "ISO 14253-1 conformance per direction" },
+        "patch_roughness":          { "type": "number",  "description": "Local surface fit residual at this point (projection quality indicator)", "unit": "mm" }
+      }
+    },
+
+    "DofReport": {
+      "type": "object",
+      "required": ["num_scalar_constraints", "jacobian_rank", "fully_constrained", "over_determined", "redundant_count"],
+      "description": "DOF accounting from constraint Jacobian rank analysis.",
+      "properties": {
+        "num_scalar_constraints": { "type": "integer", "description": "Total scalar directional constraints (sum of locked directions across all points)", "unit": "count" },
+        "jacobian_rank":          { "type": "integer", "description": "Numerical rank of the 6-column constraint Jacobian (max 6)", "unit": "count" },
+        "fully_constrained":      { "type": "boolean", "description": "True if rank == 6" },
+        "over_determined":        { "type": "boolean", "description": "True if num_constraints > 6 and rank == 6" },
+        "redundant_count":        { "type": "integer", "description": "Number of redundant constraints (num_constraints − 6 if over-determined, else 0)", "unit": "count" },
+        "free_dof_names":         { "type": "array", "items": { "type": "string" }, "description": "Names of unconstrained DOFs when rank < 6 (e.g. 'tx', 'ry')" }
+      }
+    },
+
+    "RpsConvergence": {
+      "type": "object",
+      "required": ["iterations", "final_cost", "converged"],
+      "description": "Gauss-Newton convergence report for the RPS solver.",
+      "properties": {
+        "iterations":  { "type": "integer", "description": "Number of Gauss-Newton iterations", "unit": "count" },
+        "final_cost":  { "type": "number",  "description": "Final weighted sum of squared directional residuals", "unit": "mm²" },
+        "converged":   { "type": "boolean", "description": "True if pose increment fell below convergence threshold" }
+      }
+    },
+
+    "RpsAlignmentResult": {
+      "type": "object",
+      "required": ["transform", "per_point", "dof_report", "convergence"],
+      "description": "Full result of Stage 2 pre-aligned RPS alignment. Transform convention: measured→nominal (point_nominal = T * point_measured).",
+      "properties": {
+        "transform":   { "type": "array", "items": { "type": "number" }, "minItems": 16, "maxItems": 16, "description": "4x4 row-major SE(3) transform (measured→nominal)", "unit": "mm (translation)" },
+        "per_point":   { "type": "array", "items": { "$ref": "#/$defs/RpsPointResult" }, "description": "Per-point projection, deviation, and conformance" },
+        "dof_report":  { "$ref": "#/$defs/DofReport" },
+        "convergence": { "$ref": "#/$defs/RpsConvergence" }
+      }
+    },
+
+    "DeviationStats": {
+      "type": "object",
+      "required": ["n_points", "mean", "rms", "max", "std_dev", "percent_within_tolerance"],
+      "properties": {
+        "n_points":                 { "type": "integer", "description": "Number of measured points",       "unit": "count" },
+        "mean":                     { "type": "number",  "description": "Mean unsigned deviation",          "unit": "mm" },
+        "rms":                      { "type": "number",  "description": "Root-mean-square deviation",       "unit": "mm" },
+        "max":                      { "type": "number",  "description": "Maximum unsigned deviation",       "unit": "mm" },
+        "std_dev":                  { "type": "number",  "description": "Standard deviation of deviations", "unit": "mm" },
+        "percent_within_tolerance": { "type": "number",  "description": "Percent of points within tolerance", "unit": "%" }
+      }
+    },
+
+    "Fingerprint": {
+      "type": "object",
+      "required": ["compiler", "cpu"],
+      "properties": {
+        "compiler": { "type": "string", "description": "Compiler ID + version that built the core" },
+        "cpu":      { "type": "string", "description": "CPU brand string of the machine running the core" }
+      }
+    },
+
+    "InspectResponse": {
+      "type": "object",
+      "required": [
+        "valid", "core_version", "timestamp", "reference_hash", "measured_hash",
+        "verdict", "verdict_label", "tolerance_mm", "alignment_mode", "alignment_rms",
+        "precision_tier", "heatmap_label", "stats", "fingerprint",
+        "n_display_points", "heatmap_min", "heatmap_max",
+        "fully_constrained", "num_under_constrained",
+        "expanded_uncertainty", "coverage_factor",
+        "acceptance_lower", "acceptance_upper",
+        "transform_matrix",
+        "point_deviations", "deviation_checksum",
+        "max_deviation_index", "max_deviation_value",
+        "warnings", "errors"
+      ],
+      "properties": {
+        "valid":            { "type": "boolean", "description": "True if the inspection produced a usable result" },
+        "core_version":     { "type": "string",  "description": "Core software version" },
+        "timestamp":        { "type": "string",  "description": "ISO 8601 UTC timestamp of the inspection", "format": "date-time" },
+        "reference_hash":   { "type": "string",  "description": "SHA-256 hex of the reference file (64 chars)", "pattern": "^[0-9a-f]{64}$|^$" },
+        "measured_hash":    { "type": "string",  "description": "SHA-256 hex of the measured file (64 chars)",  "pattern": "^[0-9a-f]{64}$|^$" },
+        "verdict":          { "$ref": "#/$defs/Verdict" },
+        "verdict_label":    { "type": "string",  "description": "Human-readable verdict label" },
+        "tolerance_mm":     { "type": "number",  "description": "Requested tolerance",    "unit": "mm" },
+        "alignment_mode":   { "type": "string",  "description": "Alignment method used (coarse-to-fine / best-fit / pre-aligned-rps / landmark)" },
+        "alignment_rms":    { "type": "number",  "description": "Alignment residual RMS", "unit": "mm" },
+        "precision_tier":   { "type": "string",  "description": "Precision tier name (COARSE / MEDIUM / FINE / PRECISE / ULTRA)" },
+        "heatmap_label":    { "type": "string",  "description": "Heatmap caveat label (must contain 'CORROBORATING')" },
+        "stats":            { "$ref": "#/$defs/DeviationStats" },
+        "fingerprint":      { "$ref": "#/$defs/Fingerprint" },
+        "n_display_points":      { "type": "integer", "description": "Number of per-point display data entries",  "unit": "count" },
+        "heatmap_min":           { "type": "number",  "description": "Heatmap color scale minimum",               "unit": "mm" },
+        "heatmap_max":           { "type": "number",  "description": "Heatmap color scale maximum",               "unit": "mm" },
+        "fully_constrained":     { "type": "boolean", "description": "True if all 6 DOFs are constrained" },
+        "num_under_constrained": { "type": "integer", "description": "Number of under-constrained DOFs",          "unit": "count" },
+        "expanded_uncertainty":  { "type": "number",  "description": "Expanded measurement uncertainty U",         "unit": "mm" },
+        "coverage_factor":       { "type": "number",  "description": "Coverage factor k (default 2 for 95%)" },
+        "acceptance_lower":      { "type": "number",  "description": "Guard-banded acceptance zone lower limit",   "unit": "mm" },
+        "acceptance_upper":      { "type": "number",  "description": "Guard-banded acceptance zone upper limit",   "unit": "mm" },
+        "transform_matrix":      { "type": "array", "items": { "type": "number" }, "minItems": 16, "maxItems": 16, "description": "4x4 row-major alignment transform (measured→nominal: point_nom = T * point_meas)", "unit": "mm (translation), dimensionless (rotation)" },
+        "point_deviations":      { "type": "array", "items": { "type": "number" }, "description": "Per-point signed deviation values",  "unit": "mm" },
+        "deviation_checksum":    { "type": "number",  "description": "Sum of all point_deviations (integrity check)", "unit": "mm" },
+        "max_deviation_index":   { "type": "integer", "description": "Index of the point with max absolute deviation", "unit": "index" },
+        "max_deviation_value":   { "type": "number",  "description": "Deviation value at the max-deviation point",     "unit": "mm" },
+        "rps_result":            { "$ref": "#/$defs/RpsAlignmentResult", "description": "Present only when alignment_mode == 'pre-aligned-rps'" },
+        "warnings":              { "type": "array", "items": { "type": "string" }, "description": "Warning messages" },
+        "errors":                { "type": "array", "items": { "type": "string" }, "description": "Error messages" }
+      }
+    }
+  }
+}
