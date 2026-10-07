@@ -495,21 +495,47 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                 var partTopZ = layerActualZ.GetValueOrDefault(layer, layer * h);
 
                 // Band bottom: previous pass top, extended down by re-machine overlap (K layers).
+                //
+                // With reK=3, machine-every=5, skip=10:
+                //   Layer 15 (1st event): band = skip boundary (layer 10) to 15
+                //   Layer 20 (2nd event): band = (15 - 3 = layer 12) to 20
+                //   Layer 25 (3rd event): band = (20 - 3 = layer 17) to 25
+                //
+                // The previous-pass top layer is computed by walking back from the
+                // current layer to find which 1-based layer corresponds to previousTopZ.
                 var bandBottomZ = previousTopZ;
-                if (reK > 0 && previousTopZ > 0)
+
+                // Compute the 1-based layer number where the previous pass ended.
+                var prevPassTopLayer = skipBoundaryLayer; // default: skip boundary
+                if (previousTopZ > 0)
                 {
-                    // Find the Z of the layer K layers below the previous pass top.
-                    // Walk backwards through layerActualZ to find it.
-                    var overlapTarget = layer - (int)Math.Round((partTopZ - previousTopZ) / h) - reK;
-                    overlapTarget = Math.Max(1, overlapTarget); // can't go below layer 1
-                    if (skipBoundaryLayer > 0)
-                        overlapTarget = Math.Max(skipBoundaryLayer + 1, overlapTarget); // don't re-machine into skip zone
-                    bandBottomZ = layerActualZ.GetValueOrDefault(overlapTarget, Math.Max(overlapTarget * h, 0));
-                    bandBottomZ = Math.Max(bandBottomZ, 0);
-                    // Re-machine should only LOWER the band bottom, never raise it.
-                    // On the first event the overlap target may land above previousTopZ — keep the lower value.
-                    bandBottomZ = Math.Min(bandBottomZ, previousTopZ);
+                    // Find the layer whose Z is closest to previousTopZ
+                    for (var li = layer - 1; li >= 1; li--)
+                    {
+                        var lz = layerActualZ.GetValueOrDefault(li, li * h);
+                        if (Math.Abs(lz - previousTopZ) < h * 0.5)
+                        {
+                            prevPassTopLayer = li;
+                            break;
+                        }
+                    }
                 }
+
+                // Re-machine overlap: extend the band bottom reK layers below the
+                // previous pass's top layer, but never into the skip zone.
+                var bandBottomLayer = prevPassTopLayer; // without re-machine: start where previous ended
+                if (reK > 0 && prevPassTopLayer > 0)
+                {
+                    bandBottomLayer = prevPassTopLayer - reK;
+                    // Clamp: never go below skip boundary + 1 or below layer 1
+                    var minLayer = skipBoundaryLayer > 0 ? skipBoundaryLayer + 1 : 1;
+                    bandBottomLayer = Math.Max(bandBottomLayer, minLayer);
+                }
+                // On the very first machining event, bandBottomLayer is the skip boundary
+                // (or layer 1 if no skip). The band starts right after the skip zone.
+                if (bandBottomLayer < 1) bandBottomLayer = 1;
+
+                bandBottomZ = layerActualZ.GetValueOrDefault(bandBottomLayer, Math.Max(bandBottomLayer * h, 0));
 
                 // Tool tip goes to the bottom of the band.
                 var tipZ = Math.Max(bandBottomZ - effectiveTipOverlap, cmd.BedClearanceMm);
@@ -624,14 +650,12 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                 // using that layer's own wall paths from Cura — not just one pass at
                 // the band bottom using the top layer's contour shape.
                 var reMachineGCode = new StringBuilder();
-                if (reK > 0 && bandBottomZ < previousTopZ)
+                if (bandBottomLayer < layer)
                 {
-                    // Walk from the band bottom layer up to (but not including) the current layer.
-                    // Each layer gets its own contour pass at its own Z, with its own wall paths.
-                    var reBandBottom = Math.Max(1,
-                        layer - (int)Math.Round((partTopZ - bandBottomZ) / h));
-
-                    for (var rLayer = reBandBottom; rLayer < layer; rLayer++)
+                    // Generate a contour pass at each layer from bandBottomLayer up to
+                    // (but not including) the current layer. The current layer is handled
+                    // by the main pass below. Each lower layer uses its own wall paths.
+                    for (var rLayer = bandBottomLayer; rLayer < layer; rLayer++)
                     {
                         var rCuraIdx = rLayer - 1;
                         if (!parsed.Layers.TryGetValue(rCuraIdx, out var rLayerData))
@@ -834,8 +858,7 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                 if (!spindleOk)
                     warnings.Add($"Layer {layer}: engaged {engagedMm:F1} mm exceeds tip-to-spindle {tool.ToolLengthMm:F1} mm — collision risk");
 
-                var bandBottomLayer = reK > 0 ? Math.Max(1, layer - (int)Math.Round(layerBandMm / h)) : Math.Max(1, layer - cmd.MachineEveryNLayers + 1);
-                gcodeBuilder.AppendLine($"; ── Pass @ layer {layer} (;LAYER:{curaLayerIdx}): layers {bandBottomLayer}–{layer}, Z {bandBottomZ:F2}–{partTopZ:F2}, tip Z{effectiveZ:F3}, engaged {engagedMm:F2} / flute {tool.FluteLengthMm:F1} {(fluteOk ? "OK" : "WARN")}, spindle clr {(tool.ToolLengthMm > 0 ? tool.ToolLengthMm - engagedMm : 999):F1} {(spindleOk ? "OK" : "WARN")} [{layerData.OuterWallPaths.Count} segs]{(reK > 0 ? $" re-machine:{reK}" : "")} ─");
+                gcodeBuilder.AppendLine($"; ── Pass @ layer {layer} (;LAYER:{curaLayerIdx}): layers {bandBottomLayer}–{layer}, Z {bandBottomZ:F2}–{partTopZ:F2}, tip Z{mainPassZ:F3}, engaged {engagedMm:F2} / flute {tool.FluteLengthMm:F1} {(fluteOk ? "OK" : "WARN")}, spindle clr {(tool.ToolLengthMm > 0 ? tool.ToolLengthMm - engagedMm : 999):F1} {(spindleOk ? "OK" : "WARN")} [{layerData.OuterWallPaths.Count} segs]{(reK > 0 ? $" re-machine:{reK}" : "")} ─");
                 gcodeBuilder.AppendLine(combinedGCode.TrimEnd());
                 gcodeBuilder.AppendLine();
 
