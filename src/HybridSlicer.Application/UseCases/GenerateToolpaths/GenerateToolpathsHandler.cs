@@ -530,8 +530,7 @@ public sealed class GenerateToolpathsHandler : IRequestHandler<GenerateToolpaths
                 {
                     bandBottomLayer = prevPassTopLayer - reK;
                     // Clamp: never go below skip boundary or below layer 1.
-                    // The skip boundary IS the bottom of the first band — those layers
-                    // were printed but never machined, so their surface must be cut.
+                    // Skip layers are never machined under any circumstance.
                     var minLayer = skipBoundaryLayer > 0 ? skipBoundaryLayer : 1;
                     bandBottomLayer = Math.Max(bandBottomLayer, minLayer);
                 }
